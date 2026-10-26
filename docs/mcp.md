@@ -323,6 +323,34 @@ Everything a tool returns is read by the model as tokens, so results are compact
 Measured on a 390×844 frame with auto layout: 874 bytes before, 134 after. `verbose: true` on
 `create_node`, `set_properties`, `inspect_document` and `get_node` returns the engine's full JSON.
 
+`format: "outline"` on `inspect_document` and `get_node` sends one text line per layer instead of
+JSON, indented two spaces per level: `id TYPE "name" x,y WxH`, then only what differs from a new
+layer. It is the cheapest way to check a screen's structure; read details with `get_node`.
+
+```text
+document "Untitled" selection [7] dirty
+history undo ["Batch"] redo 0
+page 1 "Page 1" bg#F5F5F5 current
+  2 FRAME "Login" 0,0 390x844 #FFFFFF vertical gap16 pad24
+    3 TEXT "Welcome back" 24,24 184x32 #000000 Inter/Regular/28
+    4 RECTANGLE "Email" 24,72 342x48 #F1F3F5 r8
+    5 RECTANGLE "Password" 24,136 342x48 #F1F3F5 r8
+    6 FRAME "Button" 24,200 342x48 #3B5BDB r8 horizontal main:center cross:center
+      7 TEXT "Sign in" 152.5,17 37x14 #FFFFFF Inter/Regular/12
+```
+
+Tokens: fills as `#hex` (a paint that is more than a colour by its type, several joined by `+`),
+`stroke#hex/weight[/align]`, `r` corner radius, `rot`, `opacity`, `hidden`, `locked`, `noclip`,
+auto layout mode with `gap`, `crossGap`, `pad`, `main:` / `cross:` / `content:` alignment, `wrap`,
+`gridColumns` / `gridRows`; `w:` / `h:` sizing other than fixed, `pin:h/v` constraints other than
+left/top; text characters (when the layer is not named after them), `family/style/size`, `align:`,
+`resize:`; an instance's `of:id "component"`; `(n children)` below the depth asked for. Anything else
+the layer has is named after `+` (e.g. `+effects,interactions`). x/y are relative to the parent
+frame; `absoluteBounds` is left out. Text and names are cut at 40 characters with `…`. A tree over
+`maxBytes` loses its last lines and ends with a line saying how many; `get_node` `offset` skips
+that many children of the layer. Measured on the login screen above (7 layers): 1811 bytes of JSON,
+587 as an outline.
+
 ## Tools
 
 | Tool | What it does |
@@ -332,8 +360,8 @@ Measured on a 390×844 frame with auto layout: 874 bytes before, 134 after. `ver
 | `batch {commands: [{command, params}], label?}` | Several commands as one undo step (`command.batch`); all-or-nothing for open documents and their document state. Failed inner commands are removed from the journal; preferences, clipboard, tool state and UI requests are not rolled back. A step can use what an earlier step returned: `{"$step": n}` anywhere in its params becomes the `id` in step n's result (zero-based), and `{"$step": n, "field": "…"}` another field of it (see Step references below). |
 | `create_node {type, x, y, width, height, parent, index, name, text, path, props}` | Create a frame, rectangle, ellipse, polygon, star, line, arrow, text, vector, section, component or slice; returns `{id, x, y, width, height}` (where the layout put it), or `{id, node}` with `verbose: true`. |
 | `set_properties {ids, props}` | `node.set` on layers (geometry, fills, strokes, effects, corner radius, auto layout, sizing, constraints, masks (`isMask`, `maskType: alpha\|vector\|luminance`), handoff status (`devStatus: none\|readyForDev\|completed`; marking again clears "Changed"), a section's `sectionContentsHidden`, text…); returns `{ok, nodes: [{id, x, y, width, height}], warnings?}`, the whole layers with `verbose: true`. |
-| `inspect_document {depth, allPages, verbose?}` | The document as compact JSON (layer tree, styles, selection, history; see Compact output below). |
-| `get_node {id, depth, verbose?}` | One layer as compact JSON; `pluginData` (`{key: value}`, values as strings) when the layer or page has layer data written with `set_properties {props: {pluginData}}`. |
+| `inspect_document {depth, allPages, format?, verbose?}` | The document as compact JSON (layer tree, styles, selection, history; see Compact output below), or one line per layer with `format: "outline"`. |
+| `get_node {id, depth, offset?, format?, verbose?}` | One layer as compact JSON (or an outline with `format: "outline"`); `pluginData` (`{key: value}`, values as strings) when the layer or page has layer data written with `set_properties {props: {pluginData}}`. |
 | `select {ids}` | Replace the selection (`[]` deselects). |
 | `export {ids, format, scale \| size, path?, bleed?, cropMarks?, bleedMarks?, cmyk?, contentsOnly?, includeBoundingBox?, svgOutlineText?, svgIdAttribute?, svgSimplifyStroke?}` | png, jpg, svg, webp, pdf, or `fig`: the whole file as `.fig`, experimental (see Exporting `.fig` files below); `size` is `2x`, `512w` or `512h`. The image covers what the layers paint (shadows towards their offset, strokes, unclipped children, a mask group's mask; hidden layers take no room; a slice is its area with everything under it, or only the frame or group it sits in while `contentsOnly` is on); `contentsOnly: false` also draws every other layer showing in that area, `includeBoundingBox` exports the layers' own boxes; SVG: `svgOutlineText: false` keeps `<text>`, `svgIdAttribute` writes unique ids from layer names, `svgSimplifyStroke: false` writes every stroke as an outline. The same options go in export settings (`export.add` / `export.update`). PDF: frames one page each (sized in points), anything else together on one page; print options: `bleed` (points or a length like `"3mm"`, `"0.125in"`), crop and bleed marks, CMYK colour (see Exports below), also taken by `file.export`, `file.exportLayers`, `file.exportFramesPdf` and stored per export setting by `export.add` / `export.update`; `run_command` `file.exportFramesPdf {page?, path?}` writes every top-level frame of a page. Without `path`, images come back as MCP image content, SVG as text. Layers' own export settings: `run_command` with `export.add` / `export.update {index, size?, suffix?, format?}` / `export.remove` and `file.exportLayers {ids?, dir?, assets?}` (every layer once per setting, named `<layer><suffix>.<format>`, a slash in a layer name making a folder; `assets: true` exports the Inspect tab's assets instead: icons as SVG, images as PNG). |
 | `screenshot {ids?, scale?, maxSize?, window?}` | PNG of the page (with background) or of layers, scaled to fit `maxSize` (default 1600). `window: true` captures the app window in front when attached, a window id (see Windows below) that window. |

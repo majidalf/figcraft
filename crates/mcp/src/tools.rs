@@ -68,6 +68,9 @@ fn ids_schema(desc: &str) -> Value {
 fn verbose_schema() -> Value {
     boolean("Return the engine's full JSON instead of the compact form (every default value spelled out)")
 }
+fn format_schema() -> Value {
+    json!({"type": "string", "enum": ["json", "outline"], "description": "\"outline\": one text line per layer, indented by depth (`id TYPE \"name\" x,y WxH` then what differs from a new layer, e.g. `#FFFFFF vertical gap16 pad24 h:hug`; values without a short token are named after `+`). A fraction of the JSON's size: read structure with it, then get_node for details. Default \"json\""})
+}
 fn obj(props: Value, required: &[&str]) -> Value {
     let mut o = json!({"type": "object", "properties": props});
     if !required.is_empty() {
@@ -178,11 +181,12 @@ pub fn tool_definitions() -> Vec<Value> {
         tool(
             "inspect_document",
             "Inspect document",
-            "The active document as JSON: name, path, dirty flag, current page, selection, the current page's layer tree (id, name, type, x/y relative to the parent frame (groups don't count), width, height, absoluteBounds in page coordinates, fills, strokes, effects, cornerRadius, layout, sizing, text properties, component links, overrides, bound variables), other pages summarised, styles, variable count and the undo history. Use it to verify every change. Compact: values a new layer has anyway are left out (no clip = clips, no sizing = fixed, no mainAlign/crossAlign = min, no textAlign = left, no absoluteBounds = same as x/y), a plain solid paint is just \"#hex\" and uniform padding one number; `verbose: true` spells everything out. Each level of `depth` multiplies the response, and `allPages` multiplies it again: on a large document the tree is reported at a shallower depth than asked for, with a `truncated` object saying so. Use get_node to read one subtree deeply instead.",
+            "The active document as JSON: name, path, dirty flag, current page, selection, the current page's layer tree (id, name, type, x/y relative to the parent frame (groups don't count), width, height, absoluteBounds in page coordinates, fills, strokes, effects, cornerRadius, layout, sizing, text properties, component links, overrides, bound variables), other pages summarised, styles, variable count and the undo history. Use it to verify every change. Compact: values a new layer has anyway are left out (no clip = clips, no sizing = fixed, no mainAlign/crossAlign = min, no textAlign = left, no absoluteBounds = same as x/y), a plain solid paint is just \"#hex\" and uniform padding one number; `verbose: true` spells everything out. Each level of `depth` multiplies the response, and `allPages` multiplies it again: on a large document the tree is reported at a shallower depth than asked for, with a `truncated` object saying so. Use get_node to read one subtree deeply instead. `format: \"outline\"` gives one line per layer instead: the cheapest way to check a screen's structure.",
             obj(
                 json!({
                     "depth": int("Tree depth for the current page (default 4)"),
                     "allPages": boolean("Expand every page, not only the current one"),
+                    "format": format_schema(),
                     "verbose": verbose_schema(),
                     "maxBytes": int(
                         "Largest response to send, in bytes of the whole JSON-RPC message (default 8388608, which fits the usual 10 MiB client buffer); 1024 of it is kept for the envelope and the request id"
@@ -195,12 +199,13 @@ pub fn tool_definitions() -> Vec<Value> {
         tool(
             "get_node",
             "Get layer",
-            "One layer as JSON (same fields and compact form as inspect_document) with its children to `depth`. A subtree too large for one message is reported at a shallower depth, or with a window of the children, and a `truncated` object says so and gives the `offset` to ask for next.",
+            "One layer as JSON (same fields and compact form as inspect_document) with its children to `depth`. A subtree too large for one message is reported at a shallower depth, or with a window of the children, and a `truncated` object says so and gives the `offset` to ask for next. `format: \"outline\"` gives one line per layer.",
             obj(
                 json!({
                     "id": id_schema("Layer id"),
                     "depth": int("Child depth (default 1)"),
                     "offset": int("First child to report (default 0), for reading a node with more children than fit in one message"),
+                    "format": format_schema(),
                     "verbose": verbose_schema(),
                     "maxBytes": int(
                         "Largest response to send, in bytes of the whole JSON-RPC message (default 8388608, which fits the usual 10 MiB client buffer); 1024 of it is kept for the envelope and the request id"
@@ -679,11 +684,54 @@ fn node_at(b: &mut dyn Backend, id: u64, depth: u64, verbose: bool) -> Result<(V
     Ok((value, wire))
 }
 
+/// `format: "outline"` (one line per layer) rather than the default JSON.
+fn outline_arg(a: &Map<String, Value>) -> Result<bool, String> {
+    let outline = match s_arg(a, "format")? {
+        None | Some("json") => false,
+        Some("outline") => true,
+        Some(other) => return Err(format!("`format` must be \"json\" or \"outline\", not {other:?}")),
+    };
+    if outline && b_arg(a, "verbose")? {
+        return Err("`verbose` applies to format \"json\" only".into());
+    }
+    Ok(outline)
+}
+
+/// Outline lines as one text block, cut to the lines that fit in `budget` with a last line saying
+/// how many were left out.
+fn outline_result(lines: Vec<String>, budget: usize, max_bytes: usize) -> ToolResult {
+    let budget = budget.saturating_sub(MARKER_RESERVE);
+    let total = lines.len();
+    let mut used = 0usize;
+    let mut kept = Vec::with_capacity(total);
+    for l in lines {
+        // Escaped as it goes on the wire, plus the `\n` between lines.
+        let size = serde_json::to_string(&l).map_or(l.len(), |s| s.len());
+        if used + size > budget {
+            break;
+        }
+        used += size;
+        kept.push(l);
+    }
+    let shown = kept.len();
+    if shown < total {
+        kept.push(format!(
+            "… {} of {total} lines left out: over the {max_bytes}-byte limit a client can read in one message; get_node({{id, depth, format: \"outline\"}}) reads one subtree",
+            total - shown
+        ));
+    }
+    ToolResult::text(kept.join("\n"))
+}
+
 fn inspect_document(b: &mut dyn Backend, a: &Map<String, Value>) -> Result<ToolResult, String> {
     let depth = n_arg(a, "depth")?.unwrap_or(4.0).clamp(0.0, 64.0) as u64;
     let all = b_arg(a, "allPages")?;
     let verbose = b_arg(a, "verbose")?;
     let (max_bytes, budget) = budget(a)?;
+    if outline_arg(a)? {
+        let (value, _) = inspect_at(b, depth, all, false)?;
+        return Ok(outline_result(crate::outline::document(&value), budget, max_bytes));
+    }
 
     let (value, wire) = inspect_at(b, depth, all, verbose)?;
     if wire <= budget {
@@ -754,6 +802,22 @@ fn get_node(b: &mut dyn Backend, a: &Map<String, Value>) -> Result<ToolResult, S
     let offset = n_arg(a, "offset")?.unwrap_or(0.0).max(0.0).min(u32::MAX as f64) as usize;
     let verbose = b_arg(a, "verbose")?;
     let (max_bytes, budget) = budget(a)?;
+    if outline_arg(a)? {
+        let (mut value, _) = node_at(b, id, depth, false)?;
+        if value.is_null() {
+            return Err(format!("no such layer {id}"));
+        }
+        let mut skipped = 0;
+        if let Some(Value::Array(c)) = value.get_mut("children") {
+            skipped = offset.min(c.len());
+            c.drain(..skipped);
+        }
+        let mut lines = crate::outline::tree(&value);
+        if skipped > 0 && !lines.is_empty() {
+            lines.insert(1, format!("  … {skipped} children before (offset {offset})"));
+        }
+        return Ok(outline_result(lines, budget, max_bytes));
+    }
 
     let (value, wire) = node_at(b, id, depth, verbose)?;
     if value.is_null() {

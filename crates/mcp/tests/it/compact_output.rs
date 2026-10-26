@@ -90,6 +90,45 @@ fn compact_values_can_be_set_back() {
 }
 
 #[test]
+fn outline_is_one_line_per_layer() {
+    let mut c = Client::new();
+    let frame = login(&mut c);
+    let o = text(&mut c, "get_node", json!({"id": frame, "depth": 1, "format": "outline"}));
+    let lines: Vec<&str> = o.lines().collect();
+    assert_eq!(lines.len(), 2, "{o}");
+    assert_eq!(lines[0], format!(r##"{frame} FRAME "Login" 100,0 390x844 #FFFFFF vertical gap16 pad24"##));
+    assert!(lines[1].starts_with("  ") && lines[1].contains(r#"TEXT "Welcome back" 24,24"#) && lines[1].contains("\"Welcome back\" "), "{o}");
+    let json = text(&mut c, "get_node", json!({"id": frame, "depth": 1}));
+    assert!(o.len() * 2 < json.len(), "{} vs {} bytes", o.len(), json.len());
+
+    let d = text(&mut c, "inspect_document", json!({"format": "outline"}));
+    assert!(d.starts_with("document ") && d.contains(" current\n") && d.contains(&format!("\n  {frame} FRAME \"Login\"")), "{d}");
+}
+
+#[test]
+fn outline_pages_children_and_stays_within_max_bytes() {
+    let mut c = Client::new();
+    let frame = c.create(json!({"type": "frame", "width": 400, "height": 400}));
+    for i in 0..60 {
+        c.create(json!({"type": "rectangle", "parent": frame, "name": format!("r{i}")}));
+    }
+    let o = text(&mut c, "get_node", json!({"id": frame, "format": "outline", "offset": 58}));
+    assert_eq!(o.lines().count(), 4, "the frame, the skipped note and two children: {o}");
+    assert!(o.contains("58 children before") && o.contains("\"r59\""), "{o}");
+
+    let cut = text(&mut c, "get_node", json!({"id": frame, "format": "outline", "maxBytes": 2048}));
+    assert!(cut.len() <= 2048 && cut.lines().last().unwrap().contains("lines left out"), "{cut}");
+}
+
+#[test]
+fn outline_rejects_bad_format_and_verbose() {
+    let mut c = Client::new();
+    assert!(c.err("inspect_document", json!({"format": "yaml"})).contains("`format`"));
+    assert!(c.err("inspect_document", json!({"format": "outline", "verbose": true})).contains("`verbose`"));
+    assert!(c.err("get_node", json!({"id": 999_999, "format": "outline"})).contains("999999"));
+}
+
+#[test]
 fn verbose_must_be_a_boolean() {
     let mut c = Client::new();
     assert!(c.err("inspect_document", json!({"verbose": "yes"})).contains("`verbose`"));

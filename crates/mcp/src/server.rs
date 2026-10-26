@@ -39,7 +39,8 @@ positioned by the layout (set layout, gap, padding, mainAlign, crossAlign, sizin
 Every menu item, panel action and shortcut is a command: find ids and params with list_commands (use a filter) \
 and run them with run_command, or several as one undo step with batch. Commands act on `ids` when given, else \
 on the selection; new layers become the selection. Colours are \"#RRGGBB\" or \"#RRGGBBAA\". Verify your work: \
-inspect_document / get_node return the layer tree as JSON (check sizes, fills, layout, overrides), and \
+inspect_document / get_node return the layer tree as JSON (check sizes, fills, layout, overrides; \
+format: \"outline\" gives one line per layer, the cheapest check of a screen's structure), and \
 screenshot returns a PNG of the page or of given layers to look at. undo/redo step through history. \
 Resources: figcraft://document, figcraft://node/{id}, figcraft://command/{id}. prompts/list has workflows.";
 
