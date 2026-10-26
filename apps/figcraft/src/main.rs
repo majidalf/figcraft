@@ -15,6 +15,11 @@
 #![deny(clippy::unwrap_used, clippy::expect_used, clippy::panic, clippy::unimplemented, clippy::todo, clippy::unreachable)]
 #![cfg_attr(all(target_os = "windows", not(debug_assertions)), windows_subsystem = "windows")]
 
+// A missing Windows GNU flag re-enables the COM error-info lookup that crashes while AccessKit
+// reports a removed UI Automation node. Catch build configurations that drop the workaround.
+#[cfg(all(target_os = "windows", target_env = "gnu", not(windows_slim_errors)))]
+compile_error!("Windows GNU builds must set windows_slim_errors to keep UI Automation responsive");
+
 #[cfg(target_os = "macos")]
 mod apple_events;
 mod args;
@@ -130,7 +135,7 @@ impl eframe::App for App {
 fn main() -> eframe::Result {
     // Windows: the update helper is a copy of this program started with `--finish-update`.
     #[cfg(windows)]
-    if let Some(result) = craft_update::self_update::finish(&craft_update::suite::FIGCRAFT, &std::env::args_os().skip(1).collect::<Vec<_>>()) {
+    if let Some(result) = craft_update::self_update::finish(&figcraft_ui_egui::updates_ui::APP, &std::env::args_os().skip(1).collect::<Vec<_>>()) {
         std::process::exit(i32::from(result.is_err()));
     }
     env_logger::Builder::from_env(env_logger::Env::default().default_filter_or("warn")).init();
@@ -165,21 +170,23 @@ fn main() -> eframe::Result {
     // System fonts: index them in the background, then wake the UI (an idle window draws no frames)
     // to lay text out again with them.
     let ctx_slot: Arc<Mutex<Option<egui::Context>>> = Arc::new(Mutex::new(None));
-    let fonts_slot = ctx_slot.clone();
+    // Wakes the window (once it is there) from another thread.
+    let wake = |slot: &Arc<Mutex<Option<egui::Context>>>| {
+        let slot = slot.clone();
+        move || {
+            if let Some(c) = slot.lock().unwrap_or_else(std::sync::PoisonError::into_inner).as_ref() {
+                c.request_repaint();
+            }
+        }
+    };
+    let fonts_wake = wake(&ctx_slot);
     std::thread::spawn(move || {
         figcraft_text::scan_system_fonts();
-        if let Some(c) = fonts_slot.lock().unwrap_or_else(std::sync::PoisonError::into_inner).as_ref() {
-            c.request_repaint();
-        }
+        fonts_wake();
     });
     let mut session = Session::empty();
     // Live sessions: the network threads wake the window when something arrives.
-    let wake_slot = ctx_slot.clone();
-    session.live.install(Box::new(figcraft_collab_net::NetLink::new(Arc::new(move || {
-        if let Some(c) = wake_slot.lock().unwrap_or_else(std::sync::PoisonError::into_inner).as_ref() {
-            c.request_repaint();
-        }
-    }))));
+    session.live.install(Box::new(figcraft_collab_net::NetLink::new(Arc::new(wake(&ctx_slot)))));
     for f in &args.files {
         if let Err(e) = session.execute("file.open", &json!({"path": f})) {
             log::error!("{f}: {e}");
@@ -191,6 +198,7 @@ fn main() -> eframe::Result {
     // The preferences first: they hold the online files a recovered document may be one of.
     let recovery = recovery::Shared::default();
     let svc = services::Desktop::load(recovery.clone());
+    svc.follow_system_dark(wake(&ctx_slot));
     if let Some(prefs) = svc.prefs.clone() {
         session.prefs = prefs;
     }
@@ -261,14 +269,15 @@ fn main() -> eframe::Result {
     let result = eframe::run_native(
         "FigCraft",
         options,
-        Box::new(move |_cc| {
+        Box::new(move |cc| {
+            with_app(|fig| fig.services.set_egui_context(&cc.egui_ctx));
             Ok(Box::new(App {
                 queue,
                 ctx_slot,
                 title: String::new(),
                 recovery,
                 #[cfg(target_os = "macos")]
-                apple_events: apple_events.connect(&_cc.egui_ctx),
+                apple_events: apple_events.connect(&cc.egui_ctx),
             }))
         }),
     );

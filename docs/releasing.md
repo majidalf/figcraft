@@ -84,6 +84,21 @@ saved by one build keeps its fonts in a build with another default. Like any oth
 renders only where it is available (embedded or installed); elsewhere the text falls back to the
 faces that are. The release workflow leaves it unset.
 
+## Updates from a fork
+
+The app looks for updates in `storytold/figcraft`'s releases. A fork that publishes its own
+releases builds with `FIGCRAFT_UPDATE_REPO=owner/repo`, and its copies then look there instead:
+
+```sh
+FIGCRAFT_UPDATE_REPO=majidalf/figcraft cargo build --release -p figcraft
+```
+
+The release needs the same assets as an official one (for Windows,
+`figcraft-<v>-windows-<arch>-portable.zip` with `portable.txt` beside `figcraft.exe`, and
+`SHA256SUMS.txt`). Installing an update from inside the app also needs the copies signed by the
+same publisher: an unsigned copy still says that a new version is out and offers its download
+page, but doesn't install it.
+
 ## What gets built
 
 | Platform | Artifacts | Built on |

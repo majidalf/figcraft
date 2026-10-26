@@ -6,6 +6,17 @@ use crate::i18n::tr;
 #[cfg(not(target_arch = "wasm32"))]
 use craft_update::updater::{Action, Status, Updater};
 
+/// FigCraft as its releases know it: updates come from FigCraft's own repository, unless the build
+/// names another with `FIGCRAFT_UPDATE_REPO=owner/repo` (a fork that publishes its own releases).
+#[cfg(not(target_arch = "wasm32"))]
+pub static APP: craft_update::App = craft_update::App {
+    repo: match option_env!("FIGCRAFT_UPDATE_REPO") {
+        Some(repo) if !repo.is_empty() => repo,
+        _ => craft_update::suite::FIGCRAFT.repo,
+    },
+    ..craft_update::suite::FIGCRAFT
+};
+
 pub(crate) struct Runtime {
     #[cfg(not(target_arch = "wasm32"))]
     updater: Updater,
@@ -25,7 +36,7 @@ impl Default for Runtime {
     fn default() -> Self {
         Self {
             #[cfg(not(target_arch = "wasm32"))]
-            updater: Updater::new(&craft_update::suite::FIGCRAFT, env!("CARGO_PKG_VERSION")),
+            updater: Updater::new(&APP, env!("CARGO_PKG_VERSION")),
             #[cfg(not(target_arch = "wasm32"))]
             startup_check: false,
             #[cfg(not(target_arch = "wasm32"))]
