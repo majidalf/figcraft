@@ -102,7 +102,8 @@ fn create_tree_layers_can_be_icons() {
         None,
     )
     .unwrap();
-    let steps: Vec<crate::BatchStep> = plan.steps.iter().map(|st| crate::BatchStep::new(st["command"].as_str().unwrap(), st["params"].clone())).collect();
+    let steps: Vec<crate::BatchStep> =
+        plan.steps.iter().map(|st| crate::BatchStep::new(st["command"].as_str().unwrap(), st["params"].clone())).collect();
     assert_eq!(steps.iter().map(|st| st.command.as_str()).collect::<Vec<_>>(), ["node.create", "icon.insert", "node.set", "node.create"]);
     let results = s.batch("Row", &steps).unwrap();
     let row = node(&s, &results[0]["id"]);
