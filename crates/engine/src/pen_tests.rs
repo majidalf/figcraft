@@ -220,3 +220,73 @@ fn the_reserved_step_key_in_pen_data_cannot_reach_the_batch() {
     let r = import(&mut s, json!({"type": "text", "name": "T", "content": "{\"$step\": 0}", "fill": "#000"}));
     assert_eq!(node(&s, &r["ids"][0])["characters"], "{\"$step\": 0}");
 }
+
+#[test]
+fn token_values_bind_to_the_documents_variables_in_the_themes_mode() {
+    let mut s = Session::new();
+    s.execute(
+        "import.penVariables",
+        &json!({"variables": {"themes": {"mode": ["light", "dark"]}, "variables": {
+            "surface": {"type": "color", "value": [{"value": "#FFFFFF", "theme": {"mode": "light"}}, {"value": "#1A2130", "theme": {"mode": "dark"}}]},
+            "ink": {"type": "color", "value": [{"value": "#0A0A0A", "theme": {"mode": "light"}}, {"value": "#F3F5F9", "theme": {"mode": "dark"}}]},
+            "radius-card": {"type": "number", "value": 16},
+            "font-body": {"type": "string", "value": "Inter"},
+            "weight-bold": {"type": "string", "value": "700"},
+        }}}),
+    )
+    .unwrap();
+    let card = |theme: Value| {
+        json!({"type": "frame", "name": "Card", "layout": "vertical", "padding": 16, "theme": theme, "fill": "$surface", "cornerRadius": "$radius-card",
+            "children": [{"type": "text", "name": "Title", "content": "Hi", "fill": "$ink", "fontFamily": "$font-body", "fontWeight": "$weight-bold", "fontSize": 20}]})
+    };
+    let r = import(&mut s, json!([card(json!({"mode": "dark"})), card(Value::Null)]));
+    assert_eq!(r["warnings"], json!([]), "{r}");
+    let vars = s.doc().unwrap().variables.clone();
+    let id = |n: &str| vars.variables.iter().find(|v| v.name == n).unwrap().id.clone();
+    let dark = node(&s, &r["ids"][0]);
+    assert_eq!(dark["boundVariables"]["fills/0/color"], json!(id("surface")), "{dark}");
+    assert_eq!(dark["boundVariables"]["cornerRadius"], json!(id("radius-card")));
+    assert_eq!(dark["fills"][0]["color"], "#1A2130", "the dark mode's value");
+    assert_eq!(dark["cornerRadius"], 16.0);
+    let title = &dark["children"][0];
+    assert_eq!(title["boundVariables"]["fills/0/color"], json!(id("ink")));
+    assert_eq!(title["boundVariables"]["fontFamily"], json!(id("font-body")));
+    assert!(title["boundVariables"].get("fontStyle").is_none(), "a weight held as text is a value only");
+    assert_eq!((title["fills"][0]["color"].as_str(), title["fontStyle"].as_str()), (Some("#F3F5F9"), Some("Bold")));
+    let mode = &vars.collections.iter().find(|c| c.name == "mode").unwrap();
+    let frame = s.doc().unwrap().node(crate::params::id_of(&r["ids"][0]).unwrap()).unwrap().clone();
+    assert_eq!(frame.var_modes.get(&mode.id), Some(&mode.modes[1].id), "the frame uses the dark mode");
+    let light = node(&s, &r["ids"][1]);
+    assert_eq!(light["fills"][0]["color"], "#FFFFFF");
+}
+
+#[test]
+fn unknown_tokens_are_named_and_bind_false_leaves_values_alone() {
+    let mut s = Session::new();
+    s.execute("import.penVariables", &json!({"variables": {"variables": {"a": {"type": "number", "value": 1}}}})).unwrap();
+    let r = import(&mut s, json!({"type": "rectangle", "width": 10, "height": 10, "fill": "$nope"}));
+    assert!(r["warnings"].to_string().contains("no variable named nope"), "{r}");
+    let r =
+        s.execute("import.pen", &json!({"bind": false, "nodes": {"type": "rectangle", "width": 10, "height": 10, "cornerRadius": "$a"}})).unwrap();
+    assert!(node(&s, &r["ids"][0]).get("boundVariables").is_none());
+}
+
+#[test]
+fn changing_a_token_changes_the_layers_bound_to_it() {
+    let mut s = Session::new();
+    s.execute(
+        "import.penVariables",
+        &json!({"variables": {"themes": {"mode": ["light", "dark"]}, "variables": {
+            "surface": {"type": "color", "value": [{"value": "#FFFFFF", "theme": {"mode": "light"}}, {"value": "#1A2130", "theme": {"mode": "dark"}}]}}}}),
+    )
+    .unwrap();
+    let r = import(
+        &mut s,
+        json!({"type": "frame", "name": "Card", "width": 40, "height": 40, "layout": "none", "theme": {"mode": "dark"}, "fill": "$surface"}),
+    );
+    s.execute("variable.set", &json!({"variable": "surface", "mode": "dark", "value": "#FF0000"})).unwrap();
+    let doc = s.doc().unwrap();
+    let id = crate::params::id_of(&r["ids"][0]).unwrap();
+    let fill = doc.node(id).unwrap().fills.first().cloned().unwrap();
+    assert_eq!(fill.kind, figcraft_color::PaintKind::Solid { color: figcraft_color::Color::from_rgb8_const(0xFF, 0, 0) }, "the dark value just set");
+}

@@ -19,7 +19,7 @@ pub fn specs() -> Vec<CommandSpec> {
     vec![spec!(
         "import.pen",
         "Import from pen.dev",
-        "{nodes (pen.dev node JSON from its MCP `execute` Get, variables and instances resolved; one node or an array; optional `b: [x, y, w, h]` resolved boxes), parent? (id; default the page), x?, y? (where the first root goes; default its own x/y)}  one undo step  → {ids, layers, warnings}",
+        "{nodes (pen.dev node JSON from its MCP `execute` Get, instances resolved; one node or an array; optional `b: [x, y, w, h]` resolved boxes), parent? (id; default the page), x?, y? (where the first root goes; default its own x/y), bind? (default true: `$name` values bound to this document's variables of those names, in the modes a node's `theme` picks; read without resolveVariables to keep them)}  one undo step  → {ids, layers, warnings}",
         false,
         import
     )]
@@ -27,12 +27,24 @@ pub fn specs() -> Vec<CommandSpec> {
 
 fn import(s: &mut Session, p: &Value) -> Result<Value> {
     let nodes = get(p, "nodes").ok_or_else(|| bad("import.pen", "`nodes` is required: pen.dev node JSON (read_guide pen)"))?;
+    // `$name` values bound to this document's variables of those names (see `pen_bind`).
+    let mut bind_warnings = Vec::new();
+    let bound;
+    let nodes = if crate::params::boolean(p, "bind").unwrap_or(true) && !s.doc()?.variables.variables.is_empty() {
+        bound = crate::pen_bind::bind(nodes, &s.doc()?.variables, &mut bind_warnings);
+        &bound
+    } else {
+        nodes
+    };
     let list: Vec<&Value> = match nodes {
         Value::Array(a) => a.iter().collect(),
         Value::Object(_) => vec![nodes],
         _ => return Err(bad("import.pen", "`nodes` must be a pen.dev node or an array of them")),
     };
     let mut cx = Convert::default();
+    for w in bind_warnings {
+        cx.warn(w);
+    }
     let mut layers = Vec::new();
     for n in list {
         if let Some(l) = cx.node(n, false, 0) {
@@ -196,6 +208,13 @@ impl Convert {
             if !kids.is_empty() {
                 layer.insert("children".into(), Value::Array(kids));
             }
+        }
+        // Set by `pen_bind`: the variables its properties follow, and the modes its theme picks.
+        if let Some(Value::Object(binds)) = o.get("_bind") {
+            props.insert("boundVariables".into(), Value::Object(binds.clone()));
+        }
+        if let Some(modes @ Value::Object(_)) = o.get("_modes") {
+            layer.insert("modes".into(), modes.clone());
         }
         layer.insert("props".into(), Value::Object(props));
         Some(Value::Object(layer))

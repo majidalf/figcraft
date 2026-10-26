@@ -401,6 +401,17 @@ collection, and `$name` values stay aliases. It writes the local variables JSON 
 `variable.import`, so importing again updates the same collections and variables. A design system of
 276 tokens (colours, numbers, strings; light and dark) came in with no warnings.
 
+With the tokens in the document, read frames *without* `resolveVariables` so `$name` values stay,
+and `import.pen` binds them: fills, strokes and effect colours, corner radii, padding and gap,
+width and height, font family and size and text content follow the variable of that name, with the
+value of the mode the node's `theme` picks (a frame with `theme: {mode: "dark"}` gets the dark mode
+through `variable.setMode`, and everything inside follows it). A font weight held as text, a line
+height held as a ratio and opacities take the value without the binding, since FigCraft binds those
+fields in another unit. A name with no variable is listed in `warnings` and its value is left out;
+`bind: false` imports plain values. A design system's two token specimen frames (1,400 layers)
+imported with about 900 layers bound and render the same as with resolved values; changing a
+token changes them.
+
 The JSON is pen.dev's published `.pen` schema (the one its skill gives agents). Frames become frames
 (no `layout` means horizontal, `none` no auto layout, `fit_content` hug, `fill_container` fill; pen.dev
 frames don't clip unless `clip`, and their inside strokes don't push children in), reusable frames

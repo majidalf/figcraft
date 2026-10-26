@@ -227,7 +227,11 @@ Check it with get_node {id, format: \"outline\", depth: 8} and a screenshot.
 Design tokens: in pen.dev run Print(JSON.stringify(GetVariables())), then run_command \
 {\"command\":\"import.penVariables\",\"params\":{\"variables\": <the printed JSON>}}. Each theme axis \
 becomes a collection with a mode per value, unthemed variables go to \"Tokens\", `$name` values stay \
-aliases; importing again updates rather than doubles.
+aliases; importing again updates rather than doubles. Import the tokens first, then read frames \
+WITHOUT resolveVariables (Get(R,{resolveInstances:true,includePathGeometry:true})): import.pen then \
+binds each `$name` (fills, strokes, effect colours, radii, padding, gap, sizes, font family and \
+size, text) to the variable of that name, with the value of the mode a node's `theme` picks \
+(theme {mode: dark} → the frame uses the dark mode). bind: false keeps plain values.
 
 Several frames: one array in `nodes` (the first root goes to x/y, the rest keep their places). The \
 JSON passes through you, so import a screen at a time rather than a whole file.

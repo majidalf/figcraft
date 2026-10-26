@@ -52,7 +52,7 @@ fn add(p: &mut Plan, n: &Value, parent: Option<Value>, path: String, depth: usiz
     }
     let is_icon = o.get("type").and_then(Value::as_str) == Some("icon");
     let keys = if is_icon { ICON_KEYS } else { PASSED };
-    if let Some(k) = o.keys().find(|k| !keys.contains(&k.as_str()) && (*k != "children" || is_icon)) {
+    if let Some(k) = o.keys().find(|k| !keys.contains(&k.as_str()) && (*k != "children" || is_icon) && *k != "modes") {
         return Err(format!("{path}: unknown key `{k}` (layer properties go in `props`)"));
     }
     if o.get("props").is_some_and(|v| !v.is_object() && !v.is_null()) {
@@ -83,6 +83,17 @@ fn add(p: &mut Plan, n: &Value, parent: Option<Value>, path: String, depth: usiz
     let me = p.steps.len();
     p.steps.push(json!({"command": "node.create", "params": params}));
     p.paths.push(path.clone());
+    // `modes: {collection: mode}`: the variable modes this layer and what's inside it use.
+    match o.get("modes") {
+        None | Some(Value::Null) => {}
+        Some(Value::Object(modes)) => {
+            for (collection, mode) in modes {
+                p.steps.push(json!({"command": "variable.setMode", "params": {"ids": [{"$step": me}], "collection": collection, "mode": mode}}));
+                p.paths.push(path.clone());
+            }
+        }
+        Some(_) => return Err(format!("{path}: `modes` must be an object of collection → mode")),
+    }
     match o.get("children") {
         None | Some(Value::Null) => {}
         Some(Value::Array(children)) => {

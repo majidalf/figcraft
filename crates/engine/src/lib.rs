@@ -48,6 +48,7 @@ pub mod measure;
 pub mod online;
 pub mod params;
 pub mod pen;
+pub mod pen_bind;
 pub mod pen_variables;
 pub mod playground;
 pub mod plugin_directory;
