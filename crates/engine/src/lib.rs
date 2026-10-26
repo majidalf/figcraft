@@ -38,6 +38,7 @@ pub mod guides;
 pub mod inspect;
 pub mod invite_links;
 pub mod keymap;
+pub mod layer_tree;
 pub mod library;
 pub mod library_server;
 pub mod library_swap;
@@ -45,6 +46,7 @@ pub mod live;
 pub mod measure;
 pub mod online;
 pub mod params;
+pub mod pen;
 pub mod playground;
 pub mod plugin_directory;
 pub mod plugins;
@@ -1833,6 +1835,8 @@ mod pdf_print_tests;
 mod pen_end_tests;
 #[cfg(test)]
 mod pen_overlay_tests;
+#[cfg(test)]
+mod pen_tests;
 #[cfg(test)]
 mod pixel_preview_tests;
 #[cfg(test)]

@@ -60,7 +60,7 @@ fn tool_definitions_stay_small_and_read_guide_has_the_rest() {
     assert!(size < 12_000, "tools/list is {size} bytes");
     let idx = c.ok("read_guide", json!({}));
     let idx = idx.as_str().unwrap();
-    for topic in ["create", "properties", "inspect", "look", "commands", "input", "files"] {
+    for topic in ["create", "properties", "inspect", "look", "commands", "input", "files", "pen"] {
         assert!(idx.contains(&format!("- {topic}:")), "{idx}");
         let g = c.ok("read_guide", json!({"topic": topic}));
         assert!(g.as_str().unwrap().len() > 200, "{topic}");

@@ -62,3 +62,21 @@ fn a_failing_layer_creates_nothing_and_is_named() {
     assert!(c.err("create_tree", json!({})).contains("`nodes`"));
     assert!(c.err("create_tree", json!({"nodes": {"type": "frame"}, "parent": "nope"})).contains("not a layer id"));
 }
+
+/// pen.dev node JSON (as its `execute` Get prints it, see read_guide pen) comes in through
+/// run_command `import.pen`.
+#[test]
+fn a_pen_dev_badge_imports_through_run_command() {
+    let mut c = Client::new();
+    let badge = json!({"type": "frame", "name": "Badge", "width": 28, "height": 28, "fill": "#B42318", "cornerRadius": 14,
+        "stroke": "#FFFFFF", "strokeWidth": 2, "strokeAlignment": "outer", "justifyContent": "center", "alignItems": "center",
+        "children": [{"type": "text", "name": "Count", "fill": "#FFFFFF", "content": "3", "fontFamily": "Inter", "fontSize": 12, "fontWeight": "700", "b": [11, 6.5, 6, 15]}],
+        "b": [0, 0, 28, 28]});
+    let r = c.run("import.pen", json!({"nodes": badge, "x": 10, "y": 10}));
+    assert_eq!((r["layers"].as_u64(), r["warnings"].clone()), (Some(2), json!([])), "{r}");
+    let o = c.ok("get_node", json!({"id": r["ids"][0], "depth": 2, "format": "outline"}));
+    let o = o.as_str().unwrap();
+    assert!(o.contains(r##"FRAME "Badge" 10,10 28x28 #B42318 stroke#FFFFFF/2/outside r14 horizontal main:center cross:center noclip"##), "{o}");
+    assert!(o.contains(r#"TEXT "Count""#) && o.contains("Inter/Bold/12"), "{o}");
+    assert!(c.ok("read_guide", json!({"topic": "pen"})).as_str().unwrap().contains("import.pen"));
+}

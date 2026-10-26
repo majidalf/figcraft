@@ -1,6 +1,6 @@
-//! `create_tree`: a nested layer description flattened into one `command.batch` of `node.create`
-//! steps, each child's `parent` a `{"$step": n}` reference to the step that made its parent. One
-//! call and one undo step build a whole screen, where layer-by-layer calls cost a round trip each.
+//! A nested layer description flattened into one `command.batch` of `node.create` steps, each
+//! child's `parent` a `{"$step": n}` reference to the step that made its parent: one undo step
+//! builds a whole screen. MCP `create_tree` and `import.pen` both build their layers this way.
 
 use serde_json::{Map, Value, json};
 
@@ -60,7 +60,11 @@ fn add(p: &mut Plan, n: &Value, parent: Option<Value>, path: String, depth: usiz
         }
     }
     if let Some(Value::Object(props)) = params.get_mut("props") {
-        crate::tools::normalize_props(props);
+        for k in ["fills", "strokes", "effects"] {
+            if let Some(v) = props.get_mut(k) {
+                crate::params::normalize_paint(v);
+            }
+        }
     }
     if let Some(parent) = parent {
         params.insert("parent".into(), parent);

@@ -122,8 +122,8 @@ pub fn tool_definitions() -> Vec<Value> {
         tool(
             "read_guide",
             "Read guide",
-            "Detail the other tool descriptions leave out: every set_properties key, create_tree and batch examples, the outline format, screenshot and export options. No topic: the index.",
-            obj(json!({"topic": string("create, properties, inspect, look, commands, input or files")}), &[]),
+            "Detail the other tool descriptions leave out: every set_properties key, create_tree and batch examples, the outline format, screenshot and export options, importing from pen.dev. No topic: the index.",
+            obj(json!({"topic": string("create, properties, inspect, look, commands, input, files or pen")}), &[]),
             true,
         ),
         tool(
@@ -586,15 +586,16 @@ fn create_tree(b: &mut dyn Backend, a: &Map<String, Value>) -> Result<ToolResult
     if let Some(p) = parent {
         id_arg(p)?;
     }
-    let plan = crate::tree::plan(nodes, parent)?;
+    let plan = figcraft_engine::layer_tree::plan(nodes, parent)?;
     let label = s_arg(a, "label")?.unwrap_or("Create layers");
     let (max_bytes, budget) = budget(a)?;
-    let results = exec(b, "command.batch", json!({"label": label, "commands": plan.steps})).map_err(|e| crate::tree::locate(&e, &plan))?;
+    let results =
+        exec(b, "command.batch", json!({"label": label, "commands": plan.steps})).map_err(|e| figcraft_engine::layer_tree::locate(&e, &plan))?;
     let roots: Vec<Value> = plan.roots.iter().filter_map(|i| results.get(*i)?.get("id").cloned()).collect();
     exec(b, "select.set", json!({"ids": roots}))?;
     let mut lines = Vec::new();
     for id in &roots {
-        let mut v = b.call("node.get", json!({"id": id, "depth": crate::tree::MAX_DEPTH}))?;
+        let mut v = b.call("node.get", json!({"id": id, "depth": figcraft_engine::layer_tree::MAX_DEPTH}))?;
         crate::slim::tree(&mut v);
         lines.extend(crate::outline::tree(&v));
     }

@@ -22,7 +22,6 @@ mod resources;
 mod server;
 mod slim;
 mod tools;
-mod tree;
 
 #[cfg(test)]
 mod gradient_tests;

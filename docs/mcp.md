@@ -382,6 +382,32 @@ that many children of the layer. Measured on the login screen above (7 layers): 
 | `type_text {text, id?}` | Type into the text being edited, or replace the contents of text layer `id`. |
 | `inspect_ui {}` | Tool, view and status (and panels, timings and the app's `windows` when attached). |
 
+### Importing from pen.dev
+
+A `.pen` file is encrypted, and pen.dev opens it only through its own tools, so FigCraft never reads
+one. An agent with both MCP servers reads the design with pen.dev's `execute` and hands the node JSON
+to FigCraft's `import.pen` command (`read_guide {topic: "pen"}` has the exact snippet):
+
+1. In pen.dev, `Get` the frame with `resolveVariables`, `resolveInstances` and `includePathGeometry`,
+   attach each node's resolved box from a `Get` visitor as `b: [x, y, width, height]`, drop the ids
+   and `Print` the JSON.
+2. In FigCraft, `run_command {command: "import.pen", params: {nodes, x?, y?, parent?}}`: one undo
+   step, the roots selected, `{ids, layers, warnings}` returned.
+
+The JSON is pen.dev's published `.pen` schema (the one its skill gives agents). Frames become frames
+(no `layout` means horizontal, `none` no auto layout, `fit_content` hug, `fill_container` fill; pen.dev
+frames don't clip unless `clip`, and their inside strokes don't push children in), reusable frames
+components, groups frames without auto layout; rectangles, ellipses (with arcs), polygons and text map
+one to one (weights as style names, a `lineHeight` ratio as a percentage, `textGrowth` as auto
+resize); paths become vectors with their `viewBox` mapped onto the box. Fills, linear, radial and
+angular gradients, strokes (per side too), corner radii, shadows and blurs come along. Image and
+shader fills, library icons (an empty frame named after the icon instead), unresolved instances or
+variables, notes, prompts, scripts, browsers, links, flips, paint blend modes and stroke caps are left
+out, each named in `warnings`. The JSON passes through the agent's context both ways, so import a
+screen at a time. Tests: `crates/engine/src/pen_tests.rs` (synthetic JSON written from the schema).
+Not yet checked against pen.dev's renderer: gradient direction (0° is taken as pointing up, as the
+schema says) and arc angles.
+
 ### Starter templates
 
 An agent can start from a template instead of an empty page. `run_command {command: "template.list"}`

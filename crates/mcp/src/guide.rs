@@ -11,6 +11,7 @@ pub const TOPICS: &[(&str, &str, &str)] = &[
     ("commands", "list_commands and run_command: the command catalog", COMMANDS),
     ("input", "pointer, key and type_text: driving the canvas like a user", INPUT),
     ("files", "open_file and save_file: formats, .fig, REST API JSON", FILES),
+    ("pen", "importing a pen.dev design through pen.dev's own MCP tools", PEN),
 ];
 
 /// The topic's text, or the index when `topic` is none or unknown.
@@ -196,6 +197,41 @@ the document's outline.
 save_file {path?}: saves as .figcraft; path is required the first time, later saves reuse it. A path \
 ending in .fig writes an experimental .fig copy instead and leaves the document's own path and unsaved \
 changes alone.
+";
+
+const PEN: &str = "\
+Importing from pen.dev
+
+A .pen file is encrypted and pen.dev only opens it through its own tools, so FigCraft never reads \
+it: read the design with pen.dev's MCP `execute`, then hand the JSON to FigCraft.
+
+1. In pen.dev, with the .pen file open, run this `execute` snippet with R set to the frame's id (ids \
+from pen.dev's get_app_state, or a Get visitor). It prints the node with variables and instances \
+resolved, path geometry included, ids dropped and each node's resolved box as `b`:
+
+const R=\"FRAME_ID\"
+const b={}
+Get(R,(n,c)=>{b[n.id]=[c.bounds.x,c.bounds.y,c.bounds.width,c.bounds.height].map(v=>Math.round(v*100)/100)},{resolveInstances:true})
+const t=Get(R,{resolveVariables:true,resolveInstances:true,includePathGeometry:true})
+const w=n=>{if(b[n.id])n.b=b[n.id];delete n.id;delete n.metadata;delete n.context;(n.children||[]).forEach(w)}
+w(t)
+Print(JSON.stringify(t))
+
+2. In FigCraft: run_command {\"command\":\"import.pen\",\"params\":{\"nodes\": <the printed JSON>, \"x\"?: 0, \
+\"y\"?: 0, \"parent\"?: id}}. One undo step; returns {ids, layers, warnings}; the roots are selected. \
+Check it with get_node {id, format: \"outline\", depth: 8} and a screenshot.
+
+Several frames: one array in `nodes` (the first root goes to x/y, the rest keep their places). The \
+JSON passes through you, so import a screen at a time rather than a whole file.
+
+Mapping: frames → frames (no `layout` = horizontal; `none` = no auto layout; fit_content = hug, \
+fill_container = fill; pen.dev frames don't clip unless `clip`), reusable frames → components, groups → \
+frames without auto layout, rectangle/ellipse (arcs)/polygon → the same, path → vector (viewBox \
+mapped onto the box), text → text (weights as style names, lineHeight ratio as %, textGrowth as auto \
+resize). Fills, gradients, strokes (per side too), corner radii, shadows and blurs come along. Not \
+imported, each named in `warnings`: image and shader fills, library icons (an empty frame named after \
+the icon instead), unresolved instances or variables, notes, prompts, scripts, browsers, links, flips, \
+blend modes and caps.
 ";
 
 #[cfg(test)]
