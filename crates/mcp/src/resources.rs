@@ -16,7 +16,7 @@ pub enum ReadError {
 
 pub fn list() -> Value {
     json!({"resources": [
-        {"uri": DOC_URI, "name": "document", "title": "Active document", "description": "The active document as JSON (current page's layer tree, pages, styles, selection, history), like inspect_document.", "mimeType": "application/json"},
+        {"uri": DOC_URI, "name": "document", "title": "Active document", "description": "The active document as compact JSON (current page's layer tree, pages, styles, selection, history), like inspect_document.", "mimeType": "application/json"},
         {"uri": COMMANDS_URI, "name": "commands", "title": "Command catalog", "description": "Every FigCraft command with label, menu, shortcut and parameter docs.", "mimeType": "application/json"},
     ]})
 }
@@ -30,7 +30,9 @@ pub fn templates() -> Value {
 
 pub fn read(b: &mut dyn Backend, uri: &str) -> Result<Value, ReadError> {
     if uri == DOC_URI {
-        return b.call("document.inspect", json!({"depth": 8})).map_err(ReadError::Backend);
+        let mut doc = b.call("document.inspect", json!({"depth": 8})).map_err(ReadError::Backend)?;
+        crate::slim::document(&mut doc);
+        return Ok(doc);
     }
     if uri == COMMANDS_URI {
         return b.call("engine.commands", json!({})).map_err(ReadError::Backend);
@@ -39,7 +41,10 @@ pub fn read(b: &mut dyn Backend, uri: &str) -> Result<Value, ReadError> {
         let Some(id) = figcraft_engine::params::id_of(&Value::String(id.to_string())) else { return Err(ReadError::NotFound(uri.into())) };
         return match b.call("node.get", json!({"id": id.0, "depth": 2})) {
             Ok(Value::Null) => Err(ReadError::NotFound(uri.into())),
-            Ok(v) => Ok(v),
+            Ok(mut v) => {
+                crate::slim::tree(&mut v);
+                Ok(v)
+            }
             Err(e) if e.contains("no such node") => Err(ReadError::NotFound(uri.into())),
             Err(e) => Err(ReadError::Backend(e)),
         };

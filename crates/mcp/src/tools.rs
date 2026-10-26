@@ -19,8 +19,9 @@ impl ToolResult {
     pub fn text(t: impl Into<String>) -> Self {
         Self { content: vec![json!({"type": "text", "text": t.into()})], is_error: false }
     }
+    /// Compact JSON: every byte is read by the model as tokens, so no indentation.
     pub fn json(v: &Value) -> Self {
-        Self::text(serde_json::to_string_pretty(v).unwrap_or_default())
+        Self::text(serde_json::to_string(v).unwrap_or_default())
     }
     pub fn error(t: impl Into<String>) -> Self {
         Self { content: vec![json!({"type": "text", "text": t.into()})], is_error: true }
@@ -63,6 +64,9 @@ fn id_schema(desc: &str) -> Value {
 }
 fn ids_schema(desc: &str) -> Value {
     json!({"type": "array", "description": desc, "items": {"anyOf": [{"type": "integer"}, {"type": "string"}]}})
+}
+fn verbose_schema() -> Value {
+    boolean("Return the engine's full JSON instead of the compact form (every default value spelled out)")
 }
 fn obj(props: Value, required: &[&str]) -> Value {
     let mut o = json!({"type": "object", "properties": props});
@@ -141,7 +145,7 @@ pub fn tool_definitions() -> Vec<Value> {
         tool(
             "create_node",
             "Create layer",
-            "Create a layer (engine `node.create`) and return its id and inspected properties. Coordinates are page units, y down; x/y are relative to the parent frame (the page when there is none, so then they are page coordinates; groups don't count). Inside an auto-layout frame the position is decided by the layout. The new layer becomes the selection.",
+            "Create a layer (engine `node.create`) and return its id and resulting box {id, x, y, width, height} (`verbose: true` for the whole inspected layer). Coordinates are page units, y down; x/y are relative to the parent frame (the page when there is none, so then they are page coordinates; groups don't count). Inside an auto-layout frame the position is decided by the layout. The new layer becomes the selection.",
             obj(
                 json!({
                     "type": {"type": "string", "enum": ["frame", "rectangle", "ellipse", "polygon", "star", "line", "arrow", "text", "vector", "section", "component", "slice"], "description": "Layer type"},
@@ -155,6 +159,7 @@ pub fn tool_definitions() -> Vec<Value> {
                     "text": string("Characters, for type text"),
                     "path": string("SVG path data, for type vector (e.g. \"M0 0 L100 0 L50 80 Z\")"),
                     "props": {"type": "object", "description": "Any set_properties keys applied at creation, e.g. {\"fill\":\"#3366FF\",\"cornerRadius\":12,\"fontSize\":24,\"layout\":\"vertical\",\"gap\":8,\"padding\":16}"},
+                    "verbose": verbose_schema(),
                 }),
                 &["type"],
             ),
@@ -163,9 +168,9 @@ pub fn tool_definitions() -> Vec<Value> {
         tool(
             "set_properties",
             "Set properties",
-            "Set properties on one or more layers as one undo step (engine `node.set`). Keys: name, visible, locked, opacity (0-1), blend, x, y (relative to the parent frame; groups don't count), width, height, rotation (degrees), fill (colour) / fills (array of paints: \"#hex\" or {\"type\":\"solid\",\"color\":\"#hex\"} or {\"type\":\"linearGradient\",\"stops\":[\"#hex\",\"#hex\"]} or stops [{\"position\":0..1,\"color\":\"#hex\"}], optional from/to handles in the unit box; radialGradient too), stroke / strokes, strokeWeight, strokeAlign (inside|center|outside), cornerRadius (n or [tl,tr,br,bl]), effects (array, e.g. {\"type\":\"dropShadow\",\"color\":\"#00000040\",\"offset\":[0,4],\"radius\":8}), clip, layout (null|horizontal|vertical|grid), gap, padding (n or [t,r,b,l]), mainAlign (min|center|max|spaceBetween|spaceAround|spaceEvenly), crossAlign, wrap, contentAlign (auto|spaceBetween: wrapped lines), sizingH / sizingV (fixed|hug|fill), constraints {horizontal, vertical}, characters, fontFamily, fontStyle, fontSize, lineHeight, letterSpacing, textAlign, textAutoResize. Auto layout keys (gap, padding, mainAlign, crossAlign, wrap, …) apply to frames, components and instances only: other layers among the ids are skipped and named in `warnings`, and with none that can take them the call is an error. A fontStyle draws in the family's nearest face; `warnings` says when that face has another weight or slant than the name asks for. Run list_commands with filter \"node.set\" for the full list. Unknown keys are an error. Returns the updated layers.",
+            "Set properties on one or more layers as one undo step (engine `node.set`). Keys: name, visible, locked, opacity (0-1), blend, x, y (relative to the parent frame; groups don't count), width, height, rotation (degrees), fill (colour) / fills (array of paints: \"#hex\" or {\"type\":\"solid\",\"color\":\"#hex\"} or {\"type\":\"linearGradient\",\"stops\":[\"#hex\",\"#hex\"]} or stops [{\"position\":0..1,\"color\":\"#hex\"}], optional from/to handles in the unit box; radialGradient too), stroke / strokes, strokeWeight, strokeAlign (inside|center|outside), cornerRadius (n or [tl,tr,br,bl]), effects (array, e.g. {\"type\":\"dropShadow\",\"color\":\"#00000040\",\"offset\":[0,4],\"radius\":8}), clip, layout (null|horizontal|vertical|grid), gap, padding (n or [t,r,b,l]), mainAlign (min|center|max|spaceBetween|spaceAround|spaceEvenly), crossAlign, wrap, contentAlign (auto|spaceBetween: wrapped lines), sizingH / sizingV (fixed|hug|fill), constraints {horizontal, vertical}, characters, fontFamily, fontStyle, fontSize, lineHeight, letterSpacing, textAlign, textAutoResize. Auto layout keys (gap, padding, mainAlign, crossAlign, wrap, …) apply to frames, components and instances only: other layers among the ids are skipped and named in `warnings`, and with none that can take them the call is an error. A fontStyle draws in the family's nearest face; `warnings` says when that face has another weight or slant than the name asks for. Run list_commands with filter \"node.set\" for the full list. Unknown keys are an error. Returns the changed layers' boxes {id, x, y, width, height} (`verbose: true` for the whole inspected layers).",
             obj(
-                json!({"ids": ids_schema("Layer ids (default: the selection)"), "props": {"type": "object", "description": "Property values to set"}}),
+                json!({"ids": ids_schema("Layer ids (default: the selection)"), "props": {"type": "object", "description": "Property values to set"}, "verbose": verbose_schema()}),
                 &["props"],
             ),
             false,
@@ -173,11 +178,12 @@ pub fn tool_definitions() -> Vec<Value> {
         tool(
             "inspect_document",
             "Inspect document",
-            "The active document as JSON: name, path, dirty flag, current page, selection, the current page's layer tree (id, name, type, x/y relative to the parent frame (groups don't count), width, height, absoluteBounds in page coordinates, fills, strokes, effects, cornerRadius, layout, sizing, text properties, component links, overrides, bound variables), other pages summarised, styles, variable count and the undo history. Use it to verify every change. Each level of `depth` multiplies the response, and `allPages` multiplies it again: on a large document the tree is reported at a shallower depth than asked for, with a `truncated` object saying so. Use get_node to read one subtree deeply instead.",
+            "The active document as JSON: name, path, dirty flag, current page, selection, the current page's layer tree (id, name, type, x/y relative to the parent frame (groups don't count), width, height, absoluteBounds in page coordinates, fills, strokes, effects, cornerRadius, layout, sizing, text properties, component links, overrides, bound variables), other pages summarised, styles, variable count and the undo history. Use it to verify every change. Compact: values a new layer has anyway are left out (no clip = clips, no sizing = fixed, no mainAlign/crossAlign = min, no textAlign = left, no absoluteBounds = same as x/y), a plain solid paint is just \"#hex\" and uniform padding one number; `verbose: true` spells everything out. Each level of `depth` multiplies the response, and `allPages` multiplies it again: on a large document the tree is reported at a shallower depth than asked for, with a `truncated` object saying so. Use get_node to read one subtree deeply instead.",
             obj(
                 json!({
                     "depth": int("Tree depth for the current page (default 4)"),
                     "allPages": boolean("Expand every page, not only the current one"),
+                    "verbose": verbose_schema(),
                     "maxBytes": int(
                         "Largest response to send, in bytes of the whole JSON-RPC message (default 8388608, which fits the usual 10 MiB client buffer); 1024 of it is kept for the envelope and the request id"
                     ),
@@ -189,12 +195,13 @@ pub fn tool_definitions() -> Vec<Value> {
         tool(
             "get_node",
             "Get layer",
-            "One layer as JSON (same fields as inspect_document) with its children to `depth`. A subtree too large for one message is reported at a shallower depth, or with a window of the children, and a `truncated` object says so and gives the `offset` to ask for next.",
+            "One layer as JSON (same fields and compact form as inspect_document) with its children to `depth`. A subtree too large for one message is reported at a shallower depth, or with a window of the children, and a `truncated` object says so and gives the `offset` to ask for next.",
             obj(
                 json!({
                     "id": id_schema("Layer id"),
                     "depth": int("Child depth (default 1)"),
                     "offset": int("First child to report (default 0), for reading a node with more children than fit in one message"),
+                    "verbose": verbose_schema(),
                     "maxBytes": int(
                         "Largest response to send, in bytes of the whole JSON-RPC message (default 8388608, which fits the usual 10 MiB client buffer); 1024 of it is kept for the envelope and the request id"
                     ),
@@ -340,6 +347,14 @@ fn s_arg<'a>(a: &'a Map<String, Value>, k: &str) -> Result<Option<&'a str>, Stri
         None | Some(Value::Null) => Ok(None),
         Some(Value::String(s)) => Ok(Some(s)),
         Some(_) => Err(format!("`{k}` must be a string")),
+    }
+}
+
+fn b_arg(a: &Map<String, Value>, k: &str) -> Result<bool, String> {
+    match a.get(k) {
+        None | Some(Value::Null) => Ok(false),
+        Some(Value::Bool(x)) => Ok(*x),
+        Some(_) => Err(format!("`{k}` must be a boolean")),
     }
 }
 
@@ -539,10 +554,28 @@ fn create_node(b: &mut dyn Backend, a: &Map<String, Value>) -> Result<ToolResult
     if let Some(Value::Object(p)) = params.get_mut("props") {
         normalize_props(p);
     }
+    let verbose = b_arg(a, "verbose")?;
     let r = exec(b, "node.create", Value::Object(params))?;
     let id = r.get("id").cloned().ok_or("node.create returned no id")?;
     let node = b.call("node.get", json!({"id": id, "depth": 0}))?;
-    Ok(ToolResult::json(&json!({"id": id, "node": node})))
+    if verbose {
+        return Ok(ToolResult::json(&json!({"id": id, "node": node})));
+    }
+    Ok(ToolResult::json(&layer_box(&node)))
+}
+
+/// A layer's id and box, the reply to an edit: what an agent needs to place the next layer, at a
+/// tenth of the whole layer's JSON. The layout may have moved or sized it, so the box is read back.
+fn layer_box(node: &Value) -> Value {
+    let mut out = Map::new();
+    for k in ["id", "x", "y", "width", "height"] {
+        if let Some(v) = node.get(k) {
+            out.insert(k.into(), v.clone());
+        }
+    }
+    let mut out = Value::Object(out);
+    crate::slim::tree(&mut out);
+    out
 }
 
 fn set_properties(b: &mut dyn Backend, a: &Map<String, Value>) -> Result<ToolResult, String> {
@@ -550,6 +583,7 @@ fn set_properties(b: &mut dyn Backend, a: &Map<String, Value>) -> Result<ToolRes
         Some(Value::Object(p)) if !p.is_empty() => p.clone(),
         _ => return Err("`props` must be a non-empty object".into()),
     };
+    let verbose = b_arg(a, "verbose")?;
     let mut props = props;
     normalize_props(&mut props);
     let mut params = json!({"props": props});
@@ -570,7 +604,12 @@ fn set_properties(b: &mut dyn Backend, a: &Map<String, Value>) -> Result<ToolRes
             .map(|a| a.iter().filter_map(Value::as_u64).collect())
             .unwrap_or_default(),
     };
-    let nodes: Vec<Value> = ids.iter().take(20).filter_map(|i| b.call("node.get", json!({"id": i, "depth": 0})).ok()).collect();
+    let nodes: Vec<Value> = ids
+        .iter()
+        .take(20)
+        .filter_map(|i| b.call("node.get", json!({"id": i, "depth": 0})).ok())
+        .map(|n| if verbose { n } else { layer_box(&n) })
+        .collect();
     let mut out = json!({"ok": true, "nodes": nodes});
     if let Some(w) = warnings {
         out["warnings"] = w;
@@ -612,37 +651,41 @@ fn budget(a: &Map<String, Value>) -> Result<(usize, usize), String> {
 }
 
 /// What a value's text block would take on the wire. It is sent as a text block, so it is measured
-/// pretty-printed *and* escaped -- escaping adds about a tenth.
+/// as [`ToolResult::json`] writes it *and* escaped -- escaping adds about a tenth.
 fn wire_size(value: &Value) -> usize {
-    let text = serde_json::to_string_pretty(value).unwrap_or_default();
+    let text = serde_json::to_string(value).unwrap_or_default();
     serde_json::to_string(&text).map_or(text.len(), |s| s.len())
 }
 
-/// The document at `depth`, and what its text block would take on the wire. The tree is sent as a
-/// text block, so it is measured pretty-printed *and* escaped -- escaping adds about a tenth.
-fn inspect_at(b: &mut dyn Backend, depth: u64, all: bool) -> Result<(Value, usize), String> {
-    let value = b.call("document.inspect", json!({"depth": depth, "allPages": all}))?;
+/// The document at `depth` (compact unless `verbose`), and what its text block would take on the
+/// wire.
+fn inspect_at(b: &mut dyn Backend, depth: u64, all: bool, verbose: bool) -> Result<(Value, usize), String> {
+    let mut value = b.call("document.inspect", json!({"depth": depth, "allPages": all}))?;
+    if !verbose {
+        crate::slim::document(&mut value);
+    }
     let wire = wire_size(&value);
     Ok((value, wire))
 }
 
-/// One layer's subtree at `depth`, and what its text block would take on the wire.
-fn node_at(b: &mut dyn Backend, id: u64, depth: u64) -> Result<(Value, usize), String> {
-    let value = b.call("node.get", json!({"id": id, "depth": depth}))?;
+/// One layer's subtree at `depth` (compact unless `verbose`), and what its text block would take on
+/// the wire.
+fn node_at(b: &mut dyn Backend, id: u64, depth: u64, verbose: bool) -> Result<(Value, usize), String> {
+    let mut value = b.call("node.get", json!({"id": id, "depth": depth}))?;
+    if !verbose {
+        crate::slim::tree(&mut value);
+    }
     let wire = wire_size(&value);
     Ok((value, wire))
 }
 
 fn inspect_document(b: &mut dyn Backend, a: &Map<String, Value>) -> Result<ToolResult, String> {
     let depth = n_arg(a, "depth")?.unwrap_or(4.0).clamp(0.0, 64.0) as u64;
-    let all = match a.get("allPages") {
-        None | Some(Value::Null) => false,
-        Some(Value::Bool(x)) => *x,
-        Some(_) => return Err("`allPages` must be a boolean".into()),
-    };
+    let all = b_arg(a, "allPages")?;
+    let verbose = b_arg(a, "verbose")?;
     let (max_bytes, budget) = budget(a)?;
 
-    let (value, wire) = inspect_at(b, depth, all)?;
+    let (value, wire) = inspect_at(b, depth, all, verbose)?;
     if wire <= budget {
         return Ok(ToolResult::json(&value));
     }
@@ -660,7 +703,7 @@ fn inspect_document(b: &mut dyn Backend, a: &Map<String, Value>) -> Result<ToolR
         let mut best: Option<(u64, Value, usize)> = None;
         while lo <= hi {
             let mid = lo + (hi - lo) / 2;
-            let (v, w) = inspect_at(b, mid, all)?;
+            let (v, w) = inspect_at(b, mid, all, verbose)?;
             if w + MARKER_RESERVE <= budget {
                 best = Some((mid, v, w));
                 if mid == hi {
@@ -709,9 +752,10 @@ fn get_node(b: &mut dyn Backend, a: &Map<String, Value>) -> Result<ToolResult, S
     let id = id_arg(a.get("id").ok_or("`id` is required")?)?;
     let depth = n_arg(a, "depth")?.unwrap_or(1.0).clamp(0.0, 64.0) as u64;
     let offset = n_arg(a, "offset")?.unwrap_or(0.0).max(0.0).min(u32::MAX as f64) as usize;
+    let verbose = b_arg(a, "verbose")?;
     let (max_bytes, budget) = budget(a)?;
 
-    let (value, wire) = node_at(b, id, depth)?;
+    let (value, wire) = node_at(b, id, depth, verbose)?;
     if value.is_null() {
         return Err(format!("no such layer {id}"));
     }
@@ -727,7 +771,7 @@ fn get_node(b: &mut dyn Backend, a: &Map<String, Value>) -> Result<ToolResult, S
         let (mut lo, mut hi) = (1u64, depth - 1);
         while lo <= hi {
             let mid = lo + (hi - lo) / 2;
-            let (v, w) = node_at(b, id, mid)?;
+            let (v, w) = node_at(b, id, mid, verbose)?;
             if w + MARKER_RESERVE <= budget {
                 (used, value, used_wire) = (mid, v, w);
                 if mid == hi {

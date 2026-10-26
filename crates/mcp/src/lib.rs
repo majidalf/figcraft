@@ -18,6 +18,7 @@ mod headless;
 mod prompts;
 mod resources;
 mod server;
+mod slim;
 mod tools;
 
 #[cfg(test)]

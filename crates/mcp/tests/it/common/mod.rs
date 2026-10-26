@@ -55,8 +55,9 @@ impl Client {
         self.ok("run_command", json!({"command": command, "params": params}))
     }
 
+    /// The layer's full JSON (`verbose`): behaviour tests check values the compact form leaves out.
     pub fn node(&mut self, id: &Value) -> Value {
-        self.ok("get_node", json!({"id": id, "depth": 3}))
+        self.ok("get_node", json!({"id": id, "depth": 3, "verbose": true}))
     }
 
     pub fn create(&mut self, args: Value) -> Value {
@@ -64,7 +65,7 @@ impl Client {
     }
 
     pub fn doc(&mut self) -> Value {
-        self.ok("inspect_document", json!({"depth": 6}))
+        self.ok("inspect_document", json!({"depth": 6, "verbose": true}))
     }
 
     /// Top-level layers of the current page.
