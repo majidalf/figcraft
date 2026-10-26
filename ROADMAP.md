@@ -132,6 +132,7 @@ Ranked; detail and milestones in [`docs/roadmap.md`](docs/roadmap.md).
 
 ## Progress log
 
+- **2026-10-26** · Agent cursor (M0.9): while an agent edits the open app through MCP or the control channel, a cursor with its name ("Claude" unless Preferences say otherwise) glides to the layers it just changed, outlines them for a moment and fades after a few seconds idle; on/off, name and colour in Preferences (`pref.agentCursor`) ([control protocol](docs/control-protocol.md#engineexecute-command-params)). Outside the Figma parity numbers.
 - **2026-10-26** · pen.dev token bindings: designs imported from pen.dev keep their token references as variable bindings, light and dark modes included, so changing a token in FigCraft changes them ([mcp](docs/mcp.md#importing-from-pendev)). Numbers unchanged.
 - **2026-10-26** · pen.dev design tokens: `import.penVariables` brings a pen.dev file's variables into Local variables, light and dark modes and aliases kept ([mcp](docs/mcp.md#importing-from-pendev)). Numbers unchanged.
 - **2026-10-26** · Icon libraries: Lucide, Phosphor (six weights) and Material Symbols (outlined, rounded, sharp; plain and filled), about 7,600 open-source icons with their licences in ATTRIBUTION.md, built into the app. Assets ▸ Icons searches and inserts them as editable vectors; agents use `icon.search` / `icon.insert` or icon layers in `create_tree`; pen.dev icons now import as real icons ([mcp](docs/mcp.md#icon-libraries)). Outside the Figma parity numbers.

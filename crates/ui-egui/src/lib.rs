@@ -6,6 +6,7 @@
 #![deny(clippy::unwrap_used, clippy::expect_used, clippy::panic, clippy::unimplemented, clippy::todo, clippy::unreachable)]
 
 pub mod a11y;
+pub mod agent_cursor;
 pub mod assets_panel;
 pub mod bidi;
 pub mod board_bar;
@@ -79,6 +80,8 @@ mod theme_startup_tests;
 
 #[cfg(test)]
 mod a11y_tests;
+#[cfg(test)]
+mod agent_cursor_tests;
 #[cfg(test)]
 mod async_dialog_tests;
 #[cfg(test)]
@@ -716,6 +719,8 @@ pub struct UiState {
     pub plugin_form: Option<plugins_ui::PluginForm>,
     /// Live sessions: remote cursors as drawn, the Join dialog.
     pub live: live::LiveUi,
+    /// The agent's cursor as drawn.
+    pub agent: agent_cursor::AgentCursorUi,
     /// Home ▸ Online.
     pub online: online::OnlineUi,
     /// The window was asked to close with unsaved changes: the question shows.
@@ -835,6 +840,7 @@ impl Default for UiState {
             plugins_manage: plugins_ui::PluginsWindow::default(),
             plugin_form: None,
             live: live::LiveUi::default(),
+            agent: agent_cursor::AgentCursorUi::default(),
             online: online::OnlineUi::default(),
             confirm_close: false,
             close_after_save_as: None,
@@ -2181,6 +2187,7 @@ impl FigApp {
         // Set apart from the literal above, which is at the macro recursion limit.
         state["uiScale"] = json!({"choice": self.session.prefs.ui_scale, "zoom": self.ui.ui_scale.zoom, "drawn": self.ui.ui_scale.drawn, "limited": self.ui.ui_scale.limited});
         state["pendingOpens"] = json!(self.ui.pending_opens.len());
+        state["agentCursor"] = json!(agent_cursor::shown(self).map(|(x, y)| json!({"x": x, "y": y})));
         state["missingFonts"] = json!(self.ui.missing_fonts.as_ref().map(missing_fonts::Shown::inspect));
         state["presentTabs"] = tabs::present_tabs_inspect(self);
         state

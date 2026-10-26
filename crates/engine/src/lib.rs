@@ -9,6 +9,7 @@
 // Tests make and inspect files directly; shipped code goes through `file_access` (clippy.toml).
 #![cfg_attr(test, allow(clippy::disallowed_methods))]
 
+pub mod agent;
 pub mod al_keys;
 pub mod annotations;
 pub mod arc_handles;
@@ -740,6 +741,11 @@ pub struct Prefs {
     /// `widget:<plugin>`.
     #[serde(skip_serializing_if = "Vec::is_empty")]
     pub recent_actions: Vec<String>,
+    /// While an agent edits through the control channel or MCP, a cursor with its name glides to
+    /// the layers it changed (`pref.agentCursor`), in its colour (`#RRGGBB`).
+    pub agent_cursor: bool,
+    pub agent_name: String,
+    pub agent_color: String,
 }
 
 /// Recently run actions kept for the Actions palette (newest first).
@@ -778,6 +784,9 @@ impl Default for Prefs {
             home_order: "desc".into(),
             view: BTreeMap::new(),
             recent_actions: Vec::new(),
+            agent_cursor: true,
+            agent_name: agent::DEFAULT_NAME.into(),
+            agent_color: agent::DEFAULT_COLOR.into(),
         }
     }
 }
@@ -842,6 +851,9 @@ pub struct Session {
     pub live: live::Lives,
     /// Commands the UI runs without waiting on a server ([`Session::start_background`]).
     pub background: background::Background,
+    /// The layers an agent's last command changed (the control channel records it; the window
+    /// shows the agent's cursor there).
+    pub agent: Option<agent::AgentEdit>,
 }
 
 impl Default for Session {
@@ -889,6 +901,7 @@ impl Session {
             plugins: plugins::Runtime::default(),
             live: live::Lives::default(),
             background: background::Background::default(),
+            agent: None,
         }
     }
 
@@ -1632,6 +1645,8 @@ fn mark_dev_changes(doc: &mut Document, before: &Document, touched: &BTreeSet<No
 
 #[cfg(test)]
 mod a11y_keys_tests;
+#[cfg(test)]
+mod agent_tests;
 #[cfg(test)]
 mod al_behaviour_tests;
 #[cfg(test)]

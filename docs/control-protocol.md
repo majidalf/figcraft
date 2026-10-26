@@ -115,6 +115,16 @@ can create a frame and fill it:
 {"id":4,"method":"engine.execute","params":{"command":"command.batch","params":{"commands":[{"command":"node.create","params":{"type":"frame","width":200,"height":100}},{"command":"node.create","params":{"type":"rectangle","parent":{"$step":0},"width":20,"height":20}}]}}}
 ```
 
+The window shows who is editing: after a command that changed the page in front, the agent's
+cursor (a pointer with its name, like a live session's people have) glides to the lower right of
+the layers it changed, which are outlined for a moment, and fades about three seconds after the
+last edit. Those layers are the ones the command named (`ids`, `id`), else the selection it left
+(new layers are selected), else the changed layers that contain no other changed layer.
+Preferences turn it off and give its name and colour (`pref.agentCursor {on?, name?, color?}`);
+`ui.inspect` reports where it is drawn as `agentCursor` (page coordinates, `null` while hidden).
+Pointer, key and text input (`ui.pointer`, `ui.key`, `ui.type`) drive the window itself and don't
+move it.
+
 ### `engine.commands {}`
 
 Every command: `[{id, label, params, menu, shortcut, undoable}]`.

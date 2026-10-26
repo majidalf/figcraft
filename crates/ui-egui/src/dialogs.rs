@@ -255,6 +255,8 @@ pub fn show(app: &mut FigApp, ctx: &Context) {
                 }
             });
             ui.add_space(8.0);
+            agent_cursor_prefs(app, ui, &prefs);
+            ui.add_space(8.0);
             ui.horizontal(|ui| {
                 ui.label(tr("Server for online sharing"));
                 // Where Share ▸ Online keeps files and join codes are asked; no key here
@@ -483,6 +485,39 @@ pub(crate) fn batch_rename_params(b: &BatchRenameUi) -> serde_json::Value {
         p["replace"] = json!(b.to);
     }
     p
+}
+
+/// Preferences ▸ the agent's cursor: on or off, the name it carries and its colour (a swatch
+/// each: its own colour and the people palette).
+fn agent_cursor_prefs(app: &mut FigApp, ui: &mut egui::Ui, prefs: &figcraft_engine::Prefs) {
+    if crate::widgets::checkbox(ui, prefs.agent_cursor, tr("Show the agent's cursor")) {
+        app.run("pref.agentCursor", json!({"on": !prefs.agent_cursor}));
+    }
+    crate::widgets::label(
+        ui,
+        tr("While an AI agent edits through MCP, its cursor moves to the layers it changes."),
+        Tokens::get(ui.ctx()).text_secondary,
+    );
+    ui.horizontal(|ui| {
+        ui.label(tr("Agent's name"));
+        let name =
+            crate::widgets::text_field(ui, egui::Id::unique("pref_agent_name"), &prefs.agent_name, 120.0, figcraft_engine::agent::DEFAULT_NAME);
+        if let Some(name) = name {
+            app.run("pref.agentCursor", json!({"name": name}));
+        }
+        let ink = Tokens::get(ui.ctx()).text;
+        for c in std::iter::once(figcraft_engine::agent::DEFAULT_COLOR).chain(figcraft_engine::live::PEOPLE) {
+            let (rect, r) = ui.allocate_exact_size(vec2(18.0, 18.0), Sense::click());
+            r.widget_info(|| egui::WidgetInfo::selected(egui::Role::RadioButton, true, prefs.agent_color == c, c));
+            ui.painter().circle_filled(rect.center(), 7.0, crate::live::color(c));
+            if prefs.agent_color.eq_ignore_ascii_case(c) {
+                ui.painter().circle_stroke(rect.center(), 8.5, Stroke::new(1.5, ink));
+            }
+            if r.on_hover_text(c).clicked() {
+                app.run("pref.agentCursor", json!({"color": c}));
+            }
+        }
+    });
 }
 
 /// Preferences ▸ Interface size: a size relative to the system's display scale (100 % is the

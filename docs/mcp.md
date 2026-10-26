@@ -19,6 +19,10 @@ The server lives in `crates/mcp` (`figcraft-mcp`) and is started by the CLI:
 
 `--attach` also takes `host:port`. The control channel only listens on 127.0.0.1.
 
+While an attached server edits, the window shows its cursor: a pointer labelled with the agent's
+name glides to the layers each edit changed and outlines them for a moment (Preferences ▸ Show the
+agent's cursor, its name and colour; `pref.agentCursor`; see `docs/control-protocol.md`).
+
 Attached calls are never automatically replayed after a transport failure: the app may have
 applied the request before its reply was lost. The error reports that the operation may have
 completed; inspect the document before retrying an edit. The next explicit call reconnects.

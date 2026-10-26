@@ -200,6 +200,30 @@ fn pref(s: &mut Session, p: &Value, f: fn(&mut crate::Prefs) -> &mut bool) -> Re
     Ok(json!({"on": *slot}))
 }
 
+/// `pref.agentCursor`: on or off, and the name and colour the agent's cursor carries.
+fn agent_cursor(s: &mut Session, p: &Value) -> Result<Value> {
+    const CMD: &str = "pref.agentCursor";
+    let (on, name, color) = (boolean(p, "on"), get(p, "name"), get(p, "color"));
+    if color.is_some() {
+        let c = req_string(CMD, p, "color")?.trim().to_string();
+        s.prefs.agent_color = match c.as_str() {
+            "" => crate::agent::DEFAULT_COLOR.into(),
+            _ if crate::live::parse_color(&c).is_some() => c.to_ascii_uppercase(),
+            _ => return Err(bad(CMD, format!("`color` is #RRGGBB, not {c:?}"))),
+        };
+    }
+    if name.is_some() {
+        let n: String = req_string(CMD, p, "name")?.trim().chars().filter(|c| !c.is_control()).take(40).collect();
+        s.prefs.agent_name = if n.is_empty() { crate::agent::DEFAULT_NAME.into() } else { n };
+    }
+    match on {
+        Some(on) => s.prefs.agent_cursor = on,
+        None if name.is_none() && color.is_none() => s.prefs.agent_cursor = !s.prefs.agent_cursor,
+        None => {}
+    }
+    Ok(json!({"on": s.prefs.agent_cursor, "name": s.prefs.agent_name, "color": s.prefs.agent_color}))
+}
+
 pub(crate) fn tool(s: &mut Session, t: ToolId) -> Result<Value> {
     // A file you can't edit now (view only, or on its way to a server): moving around only.
     if let Some(why) = s.active_read_only().filter(|_| !matches!(t, ToolId::Move | ToolId::Hand)) {
@@ -389,6 +413,13 @@ pub fn specs() -> Vec<CommandSpec> {
         ),
         spec!("pref.autoSave", "Save files automatically", "{on?}", false, |s, p| pref(s, p, |x| &mut x.auto_save)),
         spec!("pref.startOnHome", "Start on the Home screen", "{on?}", false, |s, p| pref(s, p, |x| &mut x.start_on_home)),
+        spec!(
+            "pref.agentCursor",
+            "Show the agent's cursor",
+            "{on?, name? (blank: \"Claude\"), color? (#RRGGBB; blank: the default)} → {on, name, color}: while an agent edits through MCP or the control channel, a cursor with its name glides to the layers it changed; with none of them it turns on or off",
+            false,
+            agent_cursor
+        ),
         spec!("pref.nudge", "Nudge amount", "{small?, big?}", false, |s, p| {
             s.prefs.nudge_small = num(p, "small").unwrap_or(s.prefs.nudge_small).clamp(0.01, 1000.0);
             s.prefs.nudge_big = num(p, "big").unwrap_or(s.prefs.nudge_big).clamp(0.01, 10000.0);
