@@ -17,6 +17,7 @@
 //!   with a synthetic design system used by 2,000 instances
 
 mod icon;
+mod icon_sets;
 mod layers;
 
 use std::process::{Command, ExitCode, Stdio};
@@ -46,11 +47,12 @@ fn main() -> ExitCode {
         "parity" => parity(),
         "version" => version(args.get(1).map(String::as_str), args.get(2).map(String::as_str)),
         "icon" => icon::generate(&root()),
+        "icon-sets" => icon_sets::generate(&root()),
         "wasm" => wasm(),
         "plugins" => plugins(),
         "bench" => bench(args.get(1).map_or("1000,10000,50000", String::as_str)),
         _ => {
-            eprintln!("tasks: ci, test, i18n-report, layers, assets, parity, version [set X.Y.Z], icon, wasm, plugins, bench [SIZES]");
+            eprintln!("tasks: ci, test, i18n-report, layers, assets, parity, version [set X.Y.Z], icon, icon-sets, wasm, plugins, bench [SIZES]");
             task == "help"
         }
     };

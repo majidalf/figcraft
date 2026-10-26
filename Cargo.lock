@@ -1621,6 +1621,7 @@ dependencies = [
  "figcraft-render",
  "figcraft-svg",
  "figcraft-text",
+ "flate2",
  "image",
  "log",
  "regex",
@@ -6173,8 +6174,11 @@ checksum = "9440ea3e5aeabb0ac63af70daf835274065238cdd0cec83418f417eae38bacee"
 name = "xtask"
 version = "0.11.2"
 dependencies = [
+ "base64 0.22.1",
  "figcraft-engine",
+ "flate2",
  "serde_json",
+ "sha2",
 ]
 
 [[package]]

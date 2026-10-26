@@ -6,8 +6,8 @@
 //!
 //! Each node may carry `b: [x, y, width, height]`, its resolved box from `Get`'s visitor, which sizes
 //! what the schema leaves to the layout (`fit_content`, `fill_container`, text, groups). What has no
-//! FigCraft equivalent (image fills, library icons, shaders, scripts, live browsers) is left out or
-//! drawn as a placeholder and listed in `warnings`.
+//! FigCraft equivalent (image fills, shaders, scripts, live browsers) is left out and listed in
+//! `warnings`. Icons come from FigCraft's own copies of the same libraries ([`crate::icon_sets`]).
 
 use serde_json::{Map, Value, json};
 
@@ -108,11 +108,8 @@ impl Convert {
             "polygon" => "polygon",
             "path" => "vector",
             "text" => "text",
-            "icon" => {
-                let icon = format!("{}/{}", str_of(o, "library").unwrap_or("?"), str_of(o, "icon").unwrap_or("?"));
-                self.warn(format!("icons have no FigCraft equivalent: \"{name}\" ({icon}) is an empty frame named after it"));
-                "frame"
-            }
+            // Sized like a frame here, then swapped for the library icon at the end.
+            "icon" => "frame",
             "ref" => {
                 self.warn(format!("\"{name}\" is an unresolved instance: read the design with resolveInstances: true"));
                 return None;
@@ -129,10 +126,7 @@ impl Convert {
         let mut props = Map::new();
         let mut layer = Map::new();
         layer.insert("type".into(), json!(kind));
-        layer.insert(
-            "name".into(),
-            json!(if ty == "icon" { format!("{name} (icon {})", str_of(o, "icon").unwrap_or("?")) } else { name.to_string() }),
-        );
+        layer.insert("name".into(), json!(name));
         let b = boxed(o);
         let absolute = str_of(o, "layoutPosition") == Some("absolute");
         if absolute && in_layout {
@@ -194,6 +188,7 @@ impl Convert {
                 }
             }
             "path" => self.path(o, name, &mut layer, &mut props),
+            "icon" => self.icon(o, name, &mut layer),
             _ => {}
         }
         if let Some(Value::Array(children)) = o.get("children").filter(|_| ty == "frame" || ty == "group") {
@@ -378,6 +373,37 @@ impl Convert {
         if o.contains_key("href") {
             self.warn(format!("\"{name}\": its link is not imported"));
         }
+    }
+
+    /// A pen.dev icon as the same icon from FigCraft's libraries (see [`crate::icon_sets`]), in
+    /// its fill colour; an icon not found stays an empty frame named after it.
+    fn icon(&mut self, o: &Map<String, Value>, name: &str, layer: &mut Map<String, Value>) {
+        let library = str_of(o, "library").unwrap_or("lucide");
+        let icon = str_of(o, "icon").unwrap_or("");
+        let Some((set, found, style)) = pen_icon(library, icon) else {
+            self.warn(format!("\"{name}\": no {library} icon `{icon}` in FigCraft's libraries; an empty frame named after it"));
+            layer.insert("name".into(), json!(format!("{name} (icon {icon})")));
+            return;
+        };
+        let color = match o.get("fill") {
+            Some(Value::Array(a)) => a.first(),
+            other => other,
+        }
+        .and_then(|f| match f {
+            Value::String(s) => Some(s.as_str()),
+            Value::Object(p) => str_of(p, "color"),
+            _ => None,
+        })
+        .and_then(|c| self.color(c, name))
+        .unwrap_or_else(|| "#000000".into());
+        layer.insert("type".into(), json!("icon"));
+        layer.insert("set".into(), json!(set));
+        layer.insert("icon".into(), json!(found));
+        if let Some(st) = style {
+            layer.insert("style".into(), json!(st));
+        }
+        layer.insert("color".into(), json!(color));
+        layer.remove("children");
     }
 
     /// A path's SVG data, mapped from its `viewBox` onto the node's box as pen.dev draws it.
@@ -591,6 +617,28 @@ fn boxed(o: &Map<String, Value>) -> Option<[f64; 4]> {
         [x, y, w, h] => Some([*x, *y, *w, *h]),
         _ => None,
     }
+}
+
+/// pen.dev's icon `library` and `icon` as (set, icon name, style) in FigCraft's libraries.
+/// Feather's icons live on in Lucide under the same names; a Phosphor name may carry its weight
+/// (`plus-bold`); Material names use `_` where pen.dev may write `-`.
+fn pen_icon(library: &str, icon: &str) -> Option<(&'static str, String, Option<String>)> {
+    use crate::icon_sets::set;
+    let lib = library.to_ascii_lowercase();
+    let (set_id, style) = match lib.as_str() {
+        "lucide" | "feather" => ("lucide", None),
+        "phosphor" => ("phosphor", None),
+        l if l.starts_with("material symbols") => ("material", Some(l.trim_start_matches("material symbols").trim().to_string())),
+        _ => return None,
+    };
+    let s = set(set_id)?;
+    let candidates = [icon.to_string(), icon.replace('-', "_"), icon.replace('_', "-"), icon.to_lowercase()];
+    if let Some(found) = candidates.iter().find(|c| s.icon(c).is_some()) {
+        return Some((set_id, found.clone(), style.filter(|st| s.styles.contains(st))));
+    }
+    // `plus-bold` → plus in the bold style.
+    let (base, weight) = icon.rsplit_once('-')?;
+    (s.styles.iter().any(|st| st == weight) && s.icon(base).is_some()).then(|| (set_id, base.to_string(), Some(weight.to_string())))
 }
 
 /// A corner radius FigCraft takes: a number or four.

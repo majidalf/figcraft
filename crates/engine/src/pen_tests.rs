@@ -144,7 +144,7 @@ fn what_has_no_equivalent_is_named_in_warnings() {
     let r = import(
         &mut s,
         json!({"type": "frame", "name": "Screen", "width": 100, "height": 100, "children": [
-            {"type": "icon", "name": "Search", "width": 16, "height": 16, "library": "lucide", "icon": "search", "fill": "#000"},
+            {"type": "icon", "name": "Logo", "width": 16, "height": 16, "library": "lucide", "icon": "no-such-icon", "fill": "#000"},
             {"type": "rectangle", "name": "Photo", "width": 40, "height": 40, "fill": {"type": "image", "url": "./hero.jpg"}},
             {"type": "ref", "ref": "abc", "name": "Button"},
             {"type": "note", "name": "Todo", "content": "x"},
@@ -152,13 +152,35 @@ fn what_has_no_equivalent_is_named_in_warnings() {
         ]}),
     );
     let w = r["warnings"].to_string();
-    for want in ["lucide/search", "image fill ./hero.jpg", "resolveInstances", "note \\\"Todo\\\"", "$text-primary"] {
+    for want in ["lucide icon `no-such-icon`", "image fill ./hero.jpg", "resolveInstances", "note \\\"Todo\\\"", "$text-primary"] {
         assert!(w.contains(want), "{want} in {w}");
     }
     let c = node(&s, &r["ids"][0]);
     assert_eq!(c["children"].as_array().unwrap().len(), 3, "the icon, the photo and the text; the ref and the note are left out");
-    assert_eq!(c["children"][0]["name"], "Search (icon search)");
+    assert_eq!(c["children"][0]["name"], "Logo (icon no-such-icon)");
     assert_eq!(c["children"][2].get("fills"), None, "an unresolved fill is no fill");
+}
+
+#[test]
+fn pen_dev_icons_come_in_from_the_bundled_libraries() {
+    let mut s = Session::new();
+    let r = import(
+        &mut s,
+        json!({"type": "frame", "name": "Toolbar", "gap": 8, "children": [
+            {"type": "icon", "name": "Find", "width": 20, "height": 20, "library": "lucide", "icon": "search", "fill": "#3366FF"},
+            {"type": "icon", "name": "Edit", "width": 20, "height": 20, "library": "feather", "icon": "edit-2", "fill": "#000"},
+            {"type": "icon", "name": "Add", "width": 20, "height": 20, "library": "phosphor", "icon": "plus-bold", "fill": "#000"},
+            {"type": "icon", "name": "Back", "width": 24, "height": 24, "library": "Material Symbols Rounded", "icon": "arrow-back", "fill": [{"type": "color", "color": "#101828"}]},
+        ]}),
+    );
+    assert_eq!(r["warnings"], json!([]), "{r}");
+    let c = node(&s, &r["ids"][0]);
+    let kids = c["children"].as_array().unwrap();
+    let names: Vec<&str> = kids.iter().map(|k| k["name"].as_str().unwrap()).collect();
+    assert_eq!(names, ["Find", "Edit", "Add", "Back"]);
+    assert_eq!((kids[0]["width"].as_f64(), kids[3]["width"].as_f64()), (Some(20.0), Some(24.0)));
+    assert!(kids[0].to_string().contains("#3366FF"), "the icon takes its fill colour: {}", kids[0]);
+    assert!(kids.iter().all(|k| k["children"].as_array().is_some_and(|c| !c.is_empty())), "drawn, not empty frames");
 }
 
 #[test]

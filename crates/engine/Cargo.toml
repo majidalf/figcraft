@@ -19,6 +19,7 @@ figcraft-pathops = { workspace = true }
 figcraft-render = { workspace = true }
 figcraft-format = { workspace = true }
 figcraft-svg = { workspace = true }
+flate2 = { workspace = true }
 figcraft-pdf = { workspace = true }
 craft-docpath = { workspace = true }
 figcraft-plugin = { workspace = true }

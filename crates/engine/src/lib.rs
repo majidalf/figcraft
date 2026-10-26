@@ -35,6 +35,7 @@ pub mod file_access;
 pub mod fonts;
 pub mod guard;
 pub mod guides;
+pub mod icon_sets;
 pub mod inspect;
 pub mod invite_links;
 pub mod keymap;
@@ -1761,6 +1762,8 @@ mod history_behaviour_tests;
 mod html_codegen_tests;
 #[cfg(test)]
 mod huge_stroke_tests;
+#[cfg(test)]
+mod icon_sets_tests;
 #[cfg(test)]
 mod id_params_behaviour_tests;
 #[cfg(test)]

@@ -50,6 +50,8 @@ const PAD: f32 = 16.0;
 const TO_SERVER: &str = "library.publishToServer";
 const USAGE: &str = "library.usage";
 const ADD: &str = "library.add";
+/// The Icons section's key among the folded sections (not a library id: those are paths or links).
+const ICONS_KEY: &str = "\u{0}icons";
 
 /// Where an asset comes from: this file or an enabled library (its id).
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
@@ -636,6 +638,11 @@ pub fn show(app: &mut FigApp, ui: &mut Ui) {
             hint(ui, if q.is_empty() { tr("No styles yet.") } else { tr("No matching styles") });
         }
         style_rows(ui, w, &Source::Local, &listing.local_styles, &mut act);
+        crate::widgets::separator(ui);
+        ui.add_space(4.0);
+        if crate::icon_picker::section(app, ui, w, &q, !q.is_empty() || !collapsed.contains(ICONS_KEY)) {
+            act = Some(Act::Toggle(ICONS_KEY.into()));
+        }
         for sec in &listing.libraries {
             crate::widgets::separator(ui);
             ui.add_space(4.0);

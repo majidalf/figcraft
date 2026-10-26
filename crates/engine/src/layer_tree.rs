@@ -11,6 +11,9 @@ pub const MAX_DEPTH: usize = 64;
 
 /// `node.create` keys a tree node passes through as they are.
 const PASSED: &[&str] = &["type", "x", "y", "width", "height", "index", "name", "text", "path", "points", "closed", "props"];
+/// The keys of `{type: "icon"}`: an `icon.insert` (`icon` is its `name`), then `name` and `props`
+/// set on the icon's frame.
+const ICON_KEYS: &[&str] = &["type", "set", "icon", "style", "color", "size", "width", "height", "x", "y", "name", "props"];
 
 /// The flattened tree: the batch steps, which steps are the roots, and each step's place in the
 /// tree (`nodes[0].children[2]`) for error messages.
@@ -47,11 +50,17 @@ fn add(p: &mut Plan, n: &Value, parent: Option<Value>, path: String, depth: usiz
     if !o.get("type").is_some_and(Value::is_string) {
         return Err(format!("{path}: `type` must be a string (frame, rectangle, text, …)"));
     }
-    if let Some(k) = o.keys().find(|k| !PASSED.contains(&k.as_str()) && *k != "children") {
+    let is_icon = o.get("type").and_then(Value::as_str) == Some("icon");
+    let keys = if is_icon { ICON_KEYS } else { PASSED };
+    if let Some(k) = o.keys().find(|k| !keys.contains(&k.as_str()) && (*k != "children" || is_icon)) {
         return Err(format!("{path}: unknown key `{k}` (layer properties go in `props`)"));
     }
     if o.get("props").is_some_and(|v| !v.is_object() && !v.is_null()) {
         return Err(format!("{path}: `props` must be an object"));
+    }
+    if is_icon {
+        add_icon(p, o, parent, path);
+        return Ok(());
     }
     let mut params = Map::new();
     for k in PASSED {
@@ -84,6 +93,46 @@ fn add(p: &mut Plan, n: &Value, parent: Option<Value>, path: String, depth: usiz
         Some(_) => return Err(format!("{path}: `children` must be an array")),
     }
     Ok(())
+}
+
+/// An icon from a library: `icon.insert`, then its `name` and `props` with `node.set`.
+fn add_icon(p: &mut Plan, o: &Map<String, Value>, parent: Option<Value>, path: String) {
+    let mut params = Map::new();
+    for (from, to) in [
+        ("set", "set"),
+        ("icon", "name"),
+        ("style", "style"),
+        ("color", "color"),
+        ("size", "size"),
+        ("width", "width"),
+        ("height", "height"),
+        ("x", "x"),
+        ("y", "y"),
+    ] {
+        if let Some(v) = o.get(from).filter(|v| !v.is_null()) {
+            params.insert(to.into(), v.clone());
+        }
+    }
+    if let Some(parent) = parent {
+        params.insert("parent".into(), parent);
+    }
+    params.insert("select".into(), json!(false));
+    let me = p.steps.len();
+    p.steps.push(json!({"command": "icon.insert", "params": params}));
+    p.paths.push(path.clone());
+    let mut props = o.get("props").and_then(Value::as_object).cloned().unwrap_or_default();
+    if let Some(name) = o.get("name").filter(|v| v.is_string()) {
+        props.insert("name".into(), name.clone());
+    }
+    if !props.is_empty() {
+        for k in ["fills", "strokes", "effects"] {
+            if let Some(v) = props.get_mut(k) {
+                crate::params::normalize_paint(v);
+            }
+        }
+        p.steps.push(json!({"command": "node.set", "params": {"ids": [{"$step": me}], "props": props}}));
+        p.paths.push(path);
+    }
 }
 
 /// The batch error with the failing layer's place in the tree, when the engine names a step.

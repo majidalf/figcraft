@@ -5,7 +5,9 @@ author, source and licence. `cargo xtask assets` fails if a file under `assets/`
 `docs/images/` is missing from this list.
 
 FigCraft's user-interface icons are drawn in code (`crates/ui-egui/src/icons.rs`): original work,
-MIT OR Apache-2.0. No third-party icon sets are used.
+MIT OR Apache-2.0. The icon libraries offered to designs (Assets ▸ Icons, `icon.insert`) are three
+open-source icon sets, listed below with their licences; they are content for documents, never the
+app's own interface.
 
 ## Assets in this repository
 
@@ -14,6 +16,9 @@ MIT OR Apache-2.0. No third-party icon sets are used.
 | `assets/app-icon/` (all files: `figcraft.svg`, `figcraft-small.svg`, `figcraft-*.png`, `figcraft.ico`, `hicolor/`) | The project owner (engraving-style drawing, vectorised) | Original work, see [`assets/app-icon/README.md`](assets/app-icon/README.md); derived files rendered by `cargo xtask icon` | MIT OR Apache-2.0, [`assets/app-icon/LICENSE.txt`](assets/app-icon/LICENSE.txt) | FigCraft app icon (chameleon) |
 | `docs/brand/artcraft-logo.svg`, `docs/brand/artcraft-logo.png`, `docs/brand/artcraft-logo-white.svg`, `docs/brand/artcraft-logo-white.png`, `docs/brand/artcraft-mark.svg`, `docs/brand/artcraft-mark.png`, `docs/brand/artcraft-mark-black.svg`, `docs/brand/artcraft-mark-black.png` | ArtCraft Team | storytold/craftrules `assets/brand/` | ArtCraft brand terms (`docs/brand/LICENSE-brand.txt`), not open source | Trademarks; unmodified use within FigCraft only |
 | `docs/images/` (all screenshots and exports: `shot-*.png`, `art-*.png`) | FigCraft contributors | Screenshots of FigCraft showing synthetic demo documents made in FigCraft, and PNG exports of those documents by FigCraft's renderer | MIT OR Apache-2.0 | No third-party artwork |
+| `assets/icon-sets/lucide.txt.gz` | Lucide Contributors (and Cole Bemis for the Feather icons it grew from) | npm `lucide-static@1.55.0`, https://lucide.dev, https://github.com/lucide-icons/lucide; packed by `cargo xtask icon-sets` (pinned sha512) | ISC (Feather portions MIT), [`assets/icon-sets/LICENSE-lucide.txt`](assets/icon-sets/LICENSE-lucide.txt) | 2,141 icons: SVG bodies and tags, unmodified apart from whitespace |
+| `assets/icon-sets/phosphor.txt.gz` | Phosphor Icons (Tobias Fried, Helena Zhang) | npm `@phosphor-icons/core@2.1.1`, https://phosphoricons.com, https://github.com/phosphor-icons/core; packed by `cargo xtask icon-sets` (pinned sha512) | MIT, [`assets/icon-sets/LICENSE-phosphor.txt`](assets/icon-sets/LICENSE-phosphor.txt) | 1,512 icons × 6 weights: SVG bodies and tags, unmodified apart from whitespace |
+| `assets/icon-sets/material.txt.gz` | Google (Material Symbols); npm packaging by Ravindra Marella | npm `@material-symbols/svg-400@0.48.0`, https://fonts.google.com/icons, https://github.com/google/material-design-icons, https://github.com/marella/material-symbols; packed by `cargo xtask icon-sets` (pinned sha512) | Apache-2.0, [`assets/icon-sets/LICENSE-material.txt`](assets/icon-sets/LICENSE-material.txt) | 3,929 icons at weight 400: outlined, rounded and sharp, each plain and filled; SVG bodies unmodified apart from whitespace |
 | `examples/*.figcraft` | FigCraft contributors | Synthetic demo documents built through FigCraft's command API; invented copy, shapes and vectors drawn from scratch, no images or embedded fonts | MIT OR Apache-2.0 | Text uses Inter (OFL, from craft-fonts or the system); no third-party artwork |
 
 ## Fonts (build input, not in this repository)

@@ -400,13 +400,36 @@ frames don't clip unless `clip`, and their inside strokes don't push children in
 components, groups frames without auto layout; rectangles, ellipses (with arcs), polygons and text map
 one to one (weights as style names, a `lineHeight` ratio as a percentage, `textGrowth` as auto
 resize); paths become vectors with their `viewBox` mapped onto the box. Fills, linear, radial and
-angular gradients, strokes (per side too), corner radii, shadows and blurs come along. Image and
-shader fills, library icons (an empty frame named after the icon instead), unresolved instances or
+angular gradients, strokes (per side too), corner radii, shadows and blurs come along. Icons from
+pen.dev's libraries (lucide, feather, phosphor with a weight suffix, Material Symbols outlined, rounded
+and sharp) come in from FigCraft's own copies of them (see Icon libraries below) in their fill colour;
+one not found stays an empty frame named after it. Image and shader fills, unresolved instances or
 variables, notes, prompts, scripts, browsers, links, flips, paint blend modes and stroke caps are left
 out, each named in `warnings`. The JSON passes through the agent's context both ways, so import a
 screen at a time. Tests: `crates/engine/src/pen_tests.rs` (synthetic JSON written from the schema).
 Not yet checked against pen.dev's renderer: gradient direction (0° is taken as pointing up, as the
 schema says) and arc angles.
+
+### Icon libraries
+
+FigCraft ships three open-source icon libraries for designs: **Lucide** (2,141 icons, ISC),
+**Phosphor** (1,512 icons in six weights: regular, thin, light, bold, fill, duotone; MIT) and
+**Material Symbols** (3,929 icons, outlined, rounded and sharp, each plain and `-fill`, weight 400;
+Apache-2.0). They are packed in `assets/icon-sets/` by `cargo xtask icon-sets` from pinned npm
+releases (sources and licences in [`ATTRIBUTION.md`](../ATTRIBUTION.md)) and built into the app and
+the web build (about 2.5 MB together).
+
+- `icon.sets {}` lists them: `{id, title, package, licence, homepage, styles, count}`.
+- `icon.search {query?, set?, limit?}` finds icons by name and tag, best match first:
+  `{icons: [{set, name, tags, styles}]}`.
+- `icon.insert {set, name, style?, size? | width?, height?, color?, x?, y?, parent?}` inserts one as
+  an editable frame of vectors named `set/name` (strokes for Lucide, fills for the others), in the
+  colour asked for (default black), 24 px by default; into an auto layout frame with `parent`.
+- `create_tree` takes icon layers: `{"type": "icon", "set": "lucide", "icon": "search", "size": 20,
+  "color": "#475467"}` (plus `name`, `style`, `width`/`height`, `x`/`y` and `props` for the icon's
+  frame), so a screen's icons come in the same call as its frames and text.
+- In the app: Assets ▸ Icons, one library and style at a time, searched with the Assets search field;
+  a click inserts the icon in the middle of the view, or into the selected auto layout frame.
 
 ### Starter templates
 

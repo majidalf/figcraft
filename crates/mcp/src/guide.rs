@@ -61,6 +61,9 @@ layers:
 \"props\":{\"fill\":\"#FFFFFF\",\"layout\":\"vertical\",\"padding\":24,\"gap\":16},\"children\":[\
 {\"type\":\"text\",\"text\":\"Welcome back\",\"props\":{\"fontSize\":28}},\
 {\"type\":\"rectangle\",\"name\":\"Email\",\"width\":342,\"height\":48,\"props\":{\"fill\":\"#F1F3F5\",\"cornerRadius\":8}}]}}
+Icons are layers too: {\"type\":\"icon\",\"set\":\"lucide\",\"icon\":\"search\",\"size\":20,\"color\":\"#475467\"} \
+(sets lucide, phosphor with style regular|thin|light|bold|fill|duotone, material with style \
+outlined|rounded|sharp and their -fill; find names with run_command icon.search {query, set?}). \
 All or nothing: a failing layer creates nothing and the error gives its place (nodes[0].children[1]). \
 Returns the new layers as an outline (each id and where the layout put it); the roots become the \
 selection.
@@ -228,10 +231,11 @@ Mapping: frames → frames (no `layout` = horizontal; `none` = no auto layout; f
 fill_container = fill; pen.dev frames don't clip unless `clip`), reusable frames → components, groups → \
 frames without auto layout, rectangle/ellipse (arcs)/polygon → the same, path → vector (viewBox \
 mapped onto the box), text → text (weights as style names, lineHeight ratio as %, textGrowth as auto \
-resize). Fills, gradients, strokes (per side too), corner radii, shadows and blurs come along. Not \
-imported, each named in `warnings`: image and shader fills, library icons (an empty frame named after \
-the icon instead), unresolved instances or variables, notes, prompts, scripts, browsers, links, flips, \
-blend modes and caps.
+resize). Fills, gradients, strokes (per side too), corner radii, shadows and blurs come along. Icons \
+(lucide, feather, phosphor, Material Symbols) come from FigCraft's own copies of those libraries in \
+their fill colour (one not found: an empty frame named after it). Not imported, each named in \
+`warnings`: image and shader fills, unresolved instances or variables, notes, prompts, scripts, \
+browsers, links, flips, blend modes and caps.
 ";
 
 #[cfg(test)]

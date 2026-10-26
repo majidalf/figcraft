@@ -32,6 +32,7 @@ pub mod handles;
 pub mod home;
 pub mod home_recents;
 pub mod i18n;
+pub mod icon_picker;
 pub mod icons;
 pub mod import_report;
 pub mod layers;
