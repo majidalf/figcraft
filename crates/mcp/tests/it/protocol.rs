@@ -46,8 +46,28 @@ fn tools_list_is_complete_and_schemas_are_objects() {
     for t in tools {
         assert_eq!(t["inputSchema"]["type"], "object", "{}", t["name"]);
         assert!(t["description"].as_str().unwrap().len() > 40, "{} needs a real description", t["name"]);
+        // Every definition is read at the start of every session: detail goes in read_guide.
+        assert!(t.to_string().len() < 1600, "{} definition is {} bytes", t["name"], t.to_string().len());
         assert!(t["annotations"]["readOnlyHint"].is_boolean());
     }
+}
+
+#[test]
+fn tool_definitions_stay_small_and_read_guide_has_the_rest() {
+    let mut c = Client::new();
+    let r = c.rpc("tools/list", json!({}));
+    let size = r["result"].to_string().len();
+    assert!(size < 12_000, "tools/list is {size} bytes");
+    let idx = c.ok("read_guide", json!({}));
+    let idx = idx.as_str().unwrap();
+    for topic in ["create", "properties", "inspect", "look", "commands", "input", "files"] {
+        assert!(idx.contains(&format!("- {topic}:")), "{idx}");
+        let g = c.ok("read_guide", json!({"topic": topic}));
+        assert!(g.as_str().unwrap().len() > 200, "{topic}");
+    }
+    assert!(c.ok("read_guide", json!({"topic": "properties"})).as_str().unwrap().contains("cornerRadius"));
+    assert!(c.err("read_guide", json!({"topic": "nope"})).contains("no guide"));
+    assert!(c.err("read_guide", json!({"topic": 3})).contains("`topic`"));
 }
 
 #[test]

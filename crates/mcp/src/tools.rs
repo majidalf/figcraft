@@ -66,10 +66,10 @@ fn ids_schema(desc: &str) -> Value {
     json!({"type": "array", "description": desc, "items": {"anyOf": [{"type": "integer"}, {"type": "string"}]}})
 }
 fn verbose_schema() -> Value {
-    boolean("Return the engine's full JSON instead of the compact form (every default value spelled out)")
+    boolean("Full JSON, defaults spelled out")
 }
 fn format_schema() -> Value {
-    json!({"type": "string", "enum": ["json", "outline"], "description": "\"outline\": one text line per layer, indented by depth (`id TYPE \"name\" x,y WxH` then what differs from a new layer, e.g. `#FFFFFF vertical gap16 pad24 h:hug`; values without a short token are named after `+`). A fraction of the JSON's size: read structure with it, then get_node for details. Default \"json\""})
+    json!({"type": "string", "enum": ["json", "outline"]})
 }
 fn obj(props: Value, required: &[&str]) -> Value {
     let mut o = json!({"type": "object", "properties": props});
@@ -85,12 +85,14 @@ fn tool(name: &str, title: &str, desc: &str, schema: Value, read_only: bool) -> 
         "title": title,
         "description": desc,
         "inputSchema": schema,
-        "annotations": {"title": title, "readOnlyHint": read_only, "destructiveHint": false, "openWorldHint": false},
+        // `title` above already names it for display; the hints default to true, so they stay.
+        "annotations": {"readOnlyHint": read_only, "destructiveHint": false, "openWorldHint": false},
     })
 }
 
 /// Tool names, in `tools/list` order.
 pub const TOOL_NAMES: &[&str] = &[
+    "read_guide",
     "list_commands",
     "run_command",
     "batch",
@@ -115,32 +117,37 @@ pub const TOOL_NAMES: &[&str] = &[
 /// All tools, in `tools/list` order.
 pub fn tool_definitions() -> Vec<Value> {
     let empty = || obj(json!({}), &[]);
+    let max_bytes = || int("Largest response in bytes (default 8 MiB)");
     vec![
+        tool(
+            "read_guide",
+            "Read guide",
+            "Detail the other tool descriptions leave out: every set_properties key, create_tree and batch examples, the outline format, screenshot and export options. No topic: the index.",
+            obj(json!({"topic": string("create, properties, inspect, look, commands, input or files")}), &[]),
+            true,
+        ),
         tool(
             "list_commands",
             "List commands",
-            "List FigCraft commands: id, label, menu path, shortcut, whether it is undoable, and a parameter description. Every menu item, panel action and shortcut is a command; run one with run_command (or several as one undo step with batch). Most commands act on `ids` when given, else on the selection. Use `filter` to narrow (e.g. \"align\", \"layout\", \"variable\", \"style\", \"component\", \"proto\").",
-            obj(json!({"filter": string("Case-insensitive substring matched against id, label, menu path and parameter docs")}), &[]),
+            "List commands (every menu item, panel action and shortcut is one): id, label, menu, shortcut, undoable, params. Narrow with `filter` (e.g. \"align\", \"layout\", \"component\").",
+            obj(json!({"filter": string("Substring of id, label, menu or params")}), &[]),
             true,
         ),
         tool(
             "run_command",
             "Run command",
-            "Execute one FigCraft command by id with JSON params (ids and params from list_commands). Mutating commands are one undo step each; a failing command leaves the document unchanged. Examples: {\"command\":\"align.left\",\"params\":{\"ids\":[3,4]}}, {\"command\":\"layout.add\",\"params\":{\"ids\":[2],\"direction\":\"vertical\"}}, {\"command\":\"style.create\",\"params\":{\"type\":\"paint\",\"name\":\"Brand/Primary\",\"from\":5}}. Returns the command's result (creation commands return {\"id\"}). Programmatic calls never open dialogs.",
-            obj(
-                json!({"command": string("Command id, e.g. node.create, align.left, component.create, file.export"), "params": {"type": "object", "description": "Command parameters (see list_commands)"}}),
-                &["command"],
-            ),
+            "Run one command by id with JSON params, as one undo step; acts on `ids` when given, else the selection. E.g. {\"command\":\"align.left\",\"params\":{\"ids\":[3,4]}}.",
+            obj(json!({"command": string("Command id"), "params": {"type": "object"}}), &["command"]),
             false,
         ),
         tool(
             "batch",
             "Run commands as one step",
-            "Run several commands in order as ONE undo step (engine `command.batch`). If any command fails, everything is rolled back and the error names the failing step. Returns an array of the results in order. A later step can use a layer an earlier step created: anywhere in its params, {\"$step\": n} stands for the `id` in step n's result (zero-based; {\"$step\": n, \"field\": \"…\"} picks another field). Example: [{\"command\":\"node.create\",\"params\":{\"type\":\"frame\"}}, {\"command\":\"node.create\",\"params\":{\"type\":\"text\",\"text\":\"Hi\",\"parent\":{\"$step\":0}}}] builds a frame and a text inside it in one call.",
+            "Several commands as ONE undo step, all or nothing. {\"$step\": n} in a step's params is the id step n returned (read_guide create).",
             obj(
                 json!({
-                    "commands": {"type": "array", "minItems": 1, "description": "Steps to run", "items": obj(json!({"command": string("Command id"), "params": {"type": "object"}}), &["command"])},
-                    "label": string("Undo history label (default \"Batch\")"),
+                    "commands": {"type": "array", "minItems": 1, "items": obj(json!({"command": string("Command id"), "params": {"type": "object"}}), &["command"])},
+                    "label": string("Undo label"),
                 }),
                 &["commands"],
             ),
@@ -149,20 +156,20 @@ pub fn tool_definitions() -> Vec<Value> {
         tool(
             "create_node",
             "Create layer",
-            "Create a layer (engine `node.create`) and return its id and resulting box {id, x, y, width, height} (`verbose: true` for the whole inspected layer). Coordinates are page units, y down; x/y are relative to the parent frame (the page when there is none, so then they are page coordinates; groups don't count). Inside an auto-layout frame the position is decided by the layout. The new layer becomes the selection.",
+            "Create one layer; returns {id, x, y, width, height}. x/y relative to the parent frame (page units, y down). For more than one layer use create_tree.",
             obj(
                 json!({
-                    "type": {"type": "string", "enum": ["frame", "rectangle", "ellipse", "polygon", "star", "line", "arrow", "text", "vector", "section", "component", "slice"], "description": "Layer type"},
-                    "x": num("Left, relative to the parent frame (default 0)"),
-                    "y": num("Top, relative to the parent frame (default 0)"),
-                    "width": num("Width (default 100; text hugs its content unless width is set, which makes it wrap; for a vector with path, width/height scale the path, one alone keeping its proportion, and without them the path's own box is used)"),
-                    "height": num("Height (default 100; ignored for lines/arrows and auto-height text)"),
-                    "parent": id_schema("Parent frame/group/component id (default: the current page)"),
-                    "index": int("Z-index among the parent's children (default: on top)"),
+                    "type": {"type": "string", "enum": ["frame", "rectangle", "ellipse", "polygon", "star", "line", "arrow", "text", "vector", "section", "component", "slice"]},
+                    "x": num("Default 0"),
+                    "y": num("Default 0"),
+                    "width": num("Default 100; text hugs unless set"),
+                    "height": num("Default 100"),
+                    "parent": id_schema("Default: the current page"),
+                    "index": int("Z-index (default on top)"),
                     "name": string("Layer name"),
-                    "text": string("Characters, for type text"),
-                    "path": string("SVG path data, for type vector (e.g. \"M0 0 L100 0 L50 80 Z\")"),
-                    "props": {"type": "object", "description": "Any set_properties keys applied at creation, e.g. {\"fill\":\"#3366FF\",\"cornerRadius\":12,\"fontSize\":24,\"layout\":\"vertical\",\"gap\":8,\"padding\":16}"},
+                    "text": string("Characters (text)"),
+                    "path": string("SVG path data (vector)"),
+                    "props": {"type": "object", "description": "set_properties keys, e.g. {\"fill\":\"#3366FF\",\"layout\":\"vertical\",\"gap\":8}"},
                     "verbose": verbose_schema(),
                 }),
                 &["type"],
@@ -172,12 +179,12 @@ pub fn tool_definitions() -> Vec<Value> {
         tool(
             "create_tree",
             "Create layer tree",
-            "Build a whole screen in ONE call and one undo step: `nodes` is a layer (or an array of them) with the create_node keys (type, name, x, y, width, height, text, path, index, props) plus `children`, nested to any depth. Example: {\"nodes\":{\"type\":\"frame\",\"name\":\"Login\",\"width\":390,\"height\":844,\"props\":{\"fill\":\"#FFFFFF\",\"layout\":\"vertical\",\"padding\":24,\"gap\":16},\"children\":[{\"type\":\"text\",\"text\":\"Welcome back\",\"props\":{\"fontSize\":28}},{\"type\":\"rectangle\",\"name\":\"Email\",\"width\":342,\"height\":48,\"props\":{\"fill\":\"#F1F3F5\",\"cornerRadius\":8}}]}}. All or nothing: a failing layer creates nothing and the error gives its place (nodes[0].children[1]). Returns the new layers as an outline (see inspect_document format \"outline\"): each id and where the layout put it. The roots become the selection.",
+            "Build a whole screen in ONE call and one undo step: `nodes` is a layer with the create_node keys plus `children`, nested. All or nothing. Returns the new layers as an outline (ids and laid-out boxes).",
             obj(
                 json!({
-                    "nodes": {"description": "A layer {type, name?, x?, y?, width?, height?, text?, path?, index?, props?, children?} or an array of them", "anyOf": [{"type": "object"}, {"type": "array", "items": {"type": "object"}}]},
-                    "parent": id_schema("Frame/group/component the roots go in (default: the current page)"),
-                    "label": string("Undo history label (default \"Create layers\")"),
+                    "nodes": {"description": "{type, name?, x?, y?, width?, height?, text?, props?, children?} or an array", "anyOf": [{"type": "object"}, {"type": "array", "items": {"type": "object"}}]},
+                    "parent": id_schema("Default: the current page"),
+                    "label": string("Undo label"),
                 }),
                 &["nodes"],
             ),
@@ -186,26 +193,21 @@ pub fn tool_definitions() -> Vec<Value> {
         tool(
             "set_properties",
             "Set properties",
-            "Set properties on one or more layers as one undo step (engine `node.set`). Keys: name, visible, locked, opacity (0-1), blend, x, y (relative to the parent frame; groups don't count), width, height, rotation (degrees), fill (colour) / fills (array of paints: \"#hex\" or {\"type\":\"solid\",\"color\":\"#hex\"} or {\"type\":\"linearGradient\",\"stops\":[\"#hex\",\"#hex\"]} or stops [{\"position\":0..1,\"color\":\"#hex\"}], optional from/to handles in the unit box; radialGradient too), stroke / strokes, strokeWeight, strokeAlign (inside|center|outside), cornerRadius (n or [tl,tr,br,bl]), effects (array, e.g. {\"type\":\"dropShadow\",\"color\":\"#00000040\",\"offset\":[0,4],\"radius\":8}), clip, layout (null|horizontal|vertical|grid), gap, padding (n or [t,r,b,l]), mainAlign (min|center|max|spaceBetween|spaceAround|spaceEvenly), crossAlign, wrap, contentAlign (auto|spaceBetween: wrapped lines), sizingH / sizingV (fixed|hug|fill), constraints {horizontal, vertical}, characters, fontFamily, fontStyle, fontSize, lineHeight, letterSpacing, textAlign, textAutoResize. Auto layout keys (gap, padding, mainAlign, crossAlign, wrap, …) apply to frames, components and instances only: other layers among the ids are skipped and named in `warnings`, and with none that can take them the call is an error. A fontStyle draws in the family's nearest face; `warnings` says when that face has another weight or slant than the name asks for. Run list_commands with filter \"node.set\" for the full list. Unknown keys are an error. Returns the changed layers' boxes {id, x, y, width, height} (`verbose: true` for the whole inspected layers).",
-            obj(
-                json!({"ids": ids_schema("Layer ids (default: the selection)"), "props": {"type": "object", "description": "Property values to set"}, "verbose": verbose_schema()}),
-                &["props"],
-            ),
+            "Set layer properties (one undo step): fill(s), stroke(s), cornerRadius, effects, opacity, x/y/width/height, layout/gap/padding/mainAlign/crossAlign, sizingH/V, text (fontSize, fontFamily…). Keys and paint forms: read_guide properties. Returns {ok, nodes: [{id, x, y, width, height}], warnings?}.",
+            obj(json!({"ids": ids_schema("Default: the selection"), "props": {"type": "object"}, "verbose": verbose_schema()}), &["props"]),
             false,
         ),
         tool(
             "inspect_document",
             "Inspect document",
-            "The active document as JSON: name, path, dirty flag, current page, selection, the current page's layer tree (id, name, type, x/y relative to the parent frame (groups don't count), width, height, absoluteBounds in page coordinates, fills, strokes, effects, cornerRadius, layout, sizing, text properties, component links, overrides, bound variables), other pages summarised, styles, variable count and the undo history. Use it to verify every change. Compact: values a new layer has anyway are left out (no clip = clips, no sizing = fixed, no mainAlign/crossAlign = min, no textAlign = left, no absoluteBounds = same as x/y), a plain solid paint is just \"#hex\" and uniform padding one number; `verbose: true` spells everything out. Each level of `depth` multiplies the response, and `allPages` multiplies it again: on a large document the tree is reported at a shallower depth than asked for, with a `truncated` object saying so. Use get_node to read one subtree deeply instead. `format: \"outline\"` gives one line per layer instead: the cheapest way to check a screen's structure.",
+            "The document: selection, pages, the current page's layer tree, styles, undo history. Compact JSON (defaults left out); format \"outline\" is one line per layer, the cheapest check (read_guide inspect).",
             obj(
                 json!({
-                    "depth": int("Tree depth for the current page (default 4)"),
-                    "allPages": boolean("Expand every page, not only the current one"),
+                    "depth": int("Tree depth (default 4)"),
+                    "allPages": boolean("Expand every page"),
                     "format": format_schema(),
                     "verbose": verbose_schema(),
-                    "maxBytes": int(
-                        "Largest response to send, in bytes of the whole JSON-RPC message (default 8388608, which fits the usual 10 MiB client buffer); 1024 of it is kept for the envelope and the request id"
-                    ),
+                    "maxBytes": max_bytes(),
                 }),
                 &[],
             ),
@@ -214,17 +216,15 @@ pub fn tool_definitions() -> Vec<Value> {
         tool(
             "get_node",
             "Get layer",
-            "One layer as JSON (same fields and compact form as inspect_document) with its children to `depth`. A subtree too large for one message is reported at a shallower depth, or with a window of the children, and a `truncated` object says so and gives the `offset` to ask for next. `format: \"outline\"` gives one line per layer.",
+            "One layer and its children to `depth`, as compact JSON or format \"outline\". `offset` pages through many children.",
             obj(
                 json!({
                     "id": id_schema("Layer id"),
-                    "depth": int("Child depth (default 1)"),
-                    "offset": int("First child to report (default 0), for reading a node with more children than fit in one message"),
+                    "depth": int("Default 1"),
+                    "offset": int("First child (default 0)"),
                     "format": format_schema(),
                     "verbose": verbose_schema(),
-                    "maxBytes": int(
-                        "Largest response to send, in bytes of the whole JSON-RPC message (default 8388608, which fits the usual 10 MiB client buffer); 1024 of it is kept for the envelope and the request id"
-                    ),
+                    "maxBytes": max_bytes(),
                 }),
                 &["id"],
             ),
@@ -233,30 +233,30 @@ pub fn tool_definitions() -> Vec<Value> {
         tool(
             "select",
             "Select layers",
-            "Replace the selection with `ids` (switching to their page). An empty array deselects everything. Most commands act on the selection when no `ids` are passed.",
-            obj(json!({"ids": ids_schema("Layer ids to select")}), &["ids"]),
+            "Replace the selection with `ids` ([] deselects). Commands act on the selection when given no ids.",
+            obj(json!({"ids": ids_schema("Layer ids")}), &["ids"]),
             false,
         ),
         tool(
             "export",
             "Export",
-            "Export layers (default: the selection, else every top-level layer of the current page) as png, jpg, svg, webp or pdf at `scale`, or the whole file as `fig` (experimental: written from public format knowledge, with `warnings` for what was left out; other apps may not open every file) (PDF: with `bleed`, `cropMarks`, `bleedMarks` and `cmyk` for print; options `contentsOnly`, `includeBoundingBox`, and for SVG `svgOutlineText`, `svgIdAttribute`, `svgSimplifyStroke`). With `path` the file is written there (absolute path recommended) and the result says where. Without `path`: png/jpg/webp come back as an image content block, svg as text, other formats as base64 `data`.",
+            "Export layers (default the selection) as png, jpg, svg, webp, pdf, or the file as fig; to `path`, else returned. Print and SVG options: read_guide look.",
             obj(
                 json!({
-                    "ids": ids_schema("Layers to export (several are composited into one image)"),
-                    "format": {"type": "string", "enum": ["png", "jpg", "svg", "webp", "pdf", "fig"], "description": "Format (default png, or from the path's extension)"},
-                    "scale": num("Pixel scale for raster formats (default 1, max 64)"),
-                    "size": string("Instead of `scale`: `2x`, or a width or height in pixels like `512w` / `512h`"),
-                    "path": string("Output file path"),
-                    "bleed": {"type": ["number", "string"], "description": "PDF: bleed around each page, in points or as a length like `3mm` or `0.125in`"},
-                    "cropMarks": boolean("PDF: crop marks"),
-                    "bleedMarks": boolean("PDF: bleed marks"),
-                    "cmyk": boolean("PDF: CMYK colour instead of RGB"),
-                    "contentsOnly": boolean("Only the layers themselves (default true); false also draws every other layer that shows in their area"),
-                    "includeBoundingBox": boolean("Export the layers' own boxes, cutting off shadows and outside strokes (default false)"),
-                    "svgOutlineText": boolean("SVG: text as outlines (default true); false keeps `<text>` elements"),
-                    "svgIdAttribute": boolean("SVG: layer names as unique `id` attributes (default false)"),
-                    "svgSimplifyStroke": boolean("SVG: strokes as `stroke` attributes where exact (default true); false writes outlines"),
+                    "ids": ids_schema("Layers"),
+                    "format": {"type": "string", "enum": ["png", "jpg", "svg", "webp", "pdf", "fig"]},
+                    "scale": num("Default 1"),
+                    "size": string("2x, 512w or 512h"),
+                    "path": string("Output file"),
+                    "bleed": {"type": ["number", "string"]},
+                    "cropMarks": {"type": "boolean"},
+                    "bleedMarks": {"type": "boolean"},
+                    "cmyk": {"type": "boolean"},
+                    "contentsOnly": {"type": "boolean"},
+                    "includeBoundingBox": {"type": "boolean"},
+                    "svgOutlineText": {"type": "boolean"},
+                    "svgIdAttribute": {"type": "boolean"},
+                    "svgSimplifyStroke": {"type": "boolean"},
                 }),
                 &[],
             ),
@@ -265,14 +265,14 @@ pub fn tool_definitions() -> Vec<Value> {
         tool(
             "screenshot",
             "Screenshot",
-            "Look at the design: renders the given layers (or the whole current page, with its background) and returns it as image content, plus its size and the scale used. The image is scaled down to fit `maxSize` pixels (default 800: an image costs tokens by its area, so ask for more only to read small detail, or screenshot just the layers in question). `format` changes the encoding only (the token cost follows the pixel size): \"webp\" (lossless) is usually a fraction of PNG's bytes for flat UI, \"jpeg\" smaller only for photos and textures. With `window: true` (or a window id from `inspect_ui`'s `windows`) and an attached app, captures that app window including the UI instead.",
+            "Look at the design: the page or `ids` as an image, fitted to maxSize (default 800). Tokens grow with the pixel area: screenshot just the layers in question.",
             obj(
                 json!({
-                    "ids": ids_schema("Layers to render (default: the whole current page)"),
-                    "scale": num("Requested scale (default 1; reduced to fit maxSize)"),
-                    "maxSize": int("Largest side in pixels (default 800)"),
-                    "format": {"type": "string", "enum": ["png", "jpeg", "webp"], "description": "Image format (default png; jpeg at quality 80 over white, webp lossless)"},
-                    "window": {"description": "Capture the app window: true for the one in front, or a window id (attached app only; headless renders the page)", "anyOf": [{"type": "boolean"}, {"type": "integer"}]},
+                    "ids": ids_schema("Default: the whole page"),
+                    "scale": num("Default 1"),
+                    "maxSize": int("Largest side (default 800)"),
+                    "format": {"type": "string", "enum": ["png", "jpeg", "webp"]},
+                    "window": {"description": "Attached app: true or a window id captures the window", "anyOf": [{"type": "boolean"}, {"type": "integer"}]},
                 }),
                 &[],
             ),
@@ -281,12 +281,9 @@ pub fn tool_definitions() -> Vec<Value> {
         tool(
             "open_file",
             "Open file",
-            "Open a .figcraft or .json document (FigCraft or REST API file JSON), a .fig file (best effort, with `warnings` for what wasn't imported), an .svg (becomes vectors) or an image (becomes an image layer) as the active document. Returns the new document's summary.",
+            "Open .figcraft, .json, .fig (best effort), .svg or an image as the active document (read_guide files).",
             obj(
-                json!({
-                    "path": string("File path"),
-                    "variables": {"description": "REST API file JSON only: the local variables JSON (`GET /v1/files/:key/variables/local`) as a path or the JSON object. Default: `<name>.variables.json` or `variables.json` next to the file."},
-                }),
+                json!({"path": string("File path"), "variables": {"description": "REST API JSON only: local variables JSON or its path"}}),
                 &["path"],
             ),
             false,
@@ -294,29 +291,29 @@ pub fn tool_definitions() -> Vec<Value> {
         tool(
             "save_file",
             "Save file",
-            "Save the active document as a .figcraft file. `path` is required the first time (an untitled document has no path); later saves reuse it. A `path` ending in .fig writes an experimental .fig export copy instead and leaves the document's own path and unsaved changes alone.",
-            obj(json!({"path": string("Output .figcraft path, or a .fig path for an experimental export copy")}), &[]),
+            "Save as .figcraft (`path` needed the first time). A .fig path writes an experimental export copy.",
+            obj(json!({"path": string("Output path")}), &[]),
             false,
         ),
-        tool("undo", "Undo", "Undo the last change (one command, batch or gesture). Returns {undone: bool}.", empty(), false),
-        tool("redo", "Redo", "Redo the last undone change. Returns {redone: bool}.", empty(), false),
+        tool("undo", "Undo", "Undo the last change (one command, batch or gesture). Returns {undone}.", empty(), false),
+        tool("redo", "Redo", "Redo the last undone change. Returns {redone}.", empty(), false),
         tool(
             "pointer",
             "Pointer gesture",
-            "Drive the canvas with the mouse in page coordinates, exactly as a user would with the current tool: click to select, drag to move/resize/marquee, or draw with a shape tool (set `tool` first, e.g. {\"tool\":\"rectangle\",\"kind\":\"drag\",\"x\":0,\"y\":0,\"to\":[200,100]}). `double` on a text layer starts editing it. Returns the selection and tool.",
+            "Mouse gesture in page coordinates with the current tool, as a user: click, double, drag (`to`), down, move, up, hover; `tool` picks a tool first (read_guide input).",
             obj(
                 json!({
-                    "kind": {"type": "string", "enum": ["click", "double", "drag", "down", "move", "up", "hover"], "description": "Gesture (default click)"},
+                    "kind": {"type": "string", "enum": ["click", "double", "drag", "down", "move", "up", "hover"]},
                     "x": num("Page x"),
                     "y": num("Page y"),
-                    "to": {"type": "array", "items": {"type": "number"}, "minItems": 2, "maxItems": 2, "description": "Drag end [x, y] (page)"},
-                    "steps": int("Intermediate move events for drag (default 8)"),
-                    "tool": {"type": "string", "description": "Tool to choose first: move|scale|hand|frame|section|slice|rectangle|line|arrow|ellipse|polygon|star|pen|pencil|text|comment"},
-                    "shift": boolean("Shift held"),
-                    "alt": boolean("Alt/Option held"),
-                    "cmd": boolean("Cmd (macOS) / Ctrl held"),
-                    "pressure": num("Pen pressure 0-1 (the Pencil records it as the stroke's width profile; a drag starts with it)"),
-                    "pressureTo": num("Pen pressure 0-1 at a drag's end (interpolated along it)"),
+                    "to": {"type": "array", "items": {"type": "number"}, "minItems": 2, "maxItems": 2},
+                    "steps": int("Drag move events (default 8)"),
+                    "tool": string("e.g. rectangle, pen, text, move"),
+                    "shift": {"type": "boolean"},
+                    "alt": {"type": "boolean"},
+                    "cmd": {"type": "boolean"},
+                    "pressure": num("0-1"),
+                    "pressureTo": num("0-1 at a drag's end"),
                 }),
                 &["x", "y"],
             ),
@@ -325,9 +322,9 @@ pub fn tool_definitions() -> Vec<Value> {
         tool(
             "key",
             "Press key",
-            "Press a key or shortcut as if typed on the canvas: a menu shortcut (e.g. {\"key\":\"G\",\"cmd\":true} groups, {\"key\":\"A\",\"alt\":true,\"shift\":false} …), a tool key (R, O, T, F, V…), Escape, Delete, Enter, arrows (nudge; shift = big nudge). While editing text, keys go to the text editor (Backspace, Delete, Left, Right, Home, End, Enter, Escape, SelectAll).",
+            "Press a key or shortcut on the canvas (e.g. {\"key\":\"G\",\"cmd\":true}); while editing text, keys go to the text.",
             obj(
-                json!({"key": string("Key name: a letter/digit, Escape, Delete, Backspace, Enter, ArrowLeft…"), "shift": boolean("Shift"), "alt": boolean("Alt/Option"), "cmd": boolean("Cmd/Ctrl")}),
+                json!({"key": string("A, 0, Escape, Delete, Enter, ArrowLeft…"), "shift": {"type": "boolean"}, "alt": {"type": "boolean"}, "cmd": {"type": "boolean"}}),
                 &["key"],
             ),
             false,
@@ -335,17 +332,11 @@ pub fn tool_definitions() -> Vec<Value> {
         tool(
             "type_text",
             "Type text",
-            "Type into a text layer. With `id`, starts editing that layer with all of its text selected (so the typed text replaces it), types, then stops editing. Without `id`, types at the caret of the text currently being edited (after a double-click with pointer, or after drawing with the text tool).",
-            obj(json!({"text": string("Text to type (\\n for a new line)"), "id": id_schema("Text layer to replace the contents of")}), &["text"]),
+            "Replace text layer `id`'s contents, or without `id` type at the caret of the text being edited.",
+            obj(json!({"text": string("Text (\\n: new line)"), "id": id_schema("Text layer")}), &["text"]),
             false,
         ),
-        tool(
-            "inspect_ui",
-            "Inspect UI",
-            "UI state: current tool, view (zoom, centre), status, panels, timings and the app's windows (`windows`: id, title, files) when attached to the app; headless reports the session status.",
-            empty(),
-            true,
-        ),
+        tool("inspect_ui", "Inspect UI", "Tool, view and status; panels, timings and windows when attached to the app.", empty(), true),
     ]
 }
 
@@ -456,6 +447,7 @@ pub fn call_tool(b: &mut dyn Backend, name: &str, args: &Value) -> ToolResult {
         Err(e) => return ToolResult::error(e),
     };
     let r = match name {
+        "read_guide" => s_arg(&a, "topic").and_then(crate::guide::read).map(ToolResult::text),
         "list_commands" => list_commands(b, &a),
         "run_command" => run_command(b, &a),
         "batch" => batch(b, &a),

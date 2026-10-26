@@ -30,20 +30,16 @@ const MAX_LINE: usize = 32 * 1024 * 1024;
 /// The `instructions` string sent on initialize.
 pub const INSTRUCTIONS: &str = "FigCraft is an interface design tool (Figma-class): pages hold frames, \
 groups, shapes, text, components and instances, with auto layout, styles, variables and prototyping. \
-Coordinates are page units (1 unit = 1 px at 100% zoom), x right and y DOWN. create_node and set_properties \
-take x/y RELATIVE TO THE PARENT (the page when there is no parent, so page coordinates); inspect_document \
-reports both x/y relative to the parent frame (groups don't count) and absoluteBounds in page coordinates \
-(left out when the same as x/y). Results are compact: values a new layer has anyway are left out (the tool \
-descriptions say which), and verbose: true returns everything. Children of an auto-layout frame are \
-positioned by the layout (set layout, gap, padding, mainAlign, crossAlign, sizingH/sizingV instead). \
-Build a whole screen in one call with create_tree (nested layers with `children`, one undo step). \
-Every menu item, panel action and shortcut is a command: find ids and params with list_commands (use a filter) \
-and run them with run_command, or several as one undo step with batch. Commands act on `ids` when given, else \
-on the selection; new layers become the selection. Colours are \"#RRGGBB\" or \"#RRGGBBAA\". Verify your work: \
-inspect_document / get_node return the layer tree as JSON (check sizes, fills, layout, overrides; \
-format: \"outline\" gives one line per layer, the cheapest check of a screen's structure), and \
-screenshot returns a PNG of the page or of given layers to look at. undo/redo step through history. \
-Resources: figcraft://document, figcraft://node/{id}, figcraft://command/{id}. prompts/list has workflows.";
+Coordinates are page units (1 unit = 1 px at 100% zoom), x right and y DOWN; x/y are RELATIVE TO THE PARENT \
+frame (the page when there is none; groups don't count). Children of an auto-layout frame are positioned by \
+the layout (set layout, gap, padding, mainAlign, crossAlign, sizingH/sizingV instead). Colours are \
+\"#RRGGBB\" or \"#RRGGBBAA\". Build a whole screen in one call with create_tree; every menu item, panel \
+action and shortcut is a command (list_commands, run_command, batch for one undo step). Commands act on \
+`ids` when given, else on the selection; new layers become the selection. Verify your work with \
+inspect_document / get_node (format: \"outline\" is the cheapest) and screenshot. Results are compact \
+(defaults left out; verbose: true for everything). read_guide has the detail the tool descriptions leave \
+out (property keys, examples, options). Resources: figcraft://document, figcraft://node/{id}, \
+figcraft://command/{id}; prompts/list has workflows.";
 
 /// An MCP server bound to one backend.
 pub struct Server {

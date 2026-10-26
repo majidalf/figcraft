@@ -303,6 +303,14 @@ Or in a project's `.mcp.json`:
 - Programmatic calls never open dialogs.
 - Verify your work: `inspect_document` / `get_node` for numbers, `screenshot` for pixels.
 
+### Short tool definitions
+
+A client sends every tool definition to the model at the start of each session, used or not, so
+the definitions are kept to a sentence or two and short parameter notes; the rest (every property
+key, examples, export options) is read on demand with `read_guide {topic}`. `tools/list` is 11,940
+bytes for 20 tools, against 22,629 for 19 before the split, and the `initialize` instructions 1,489
+against 1,974. A test keeps each definition under 1,600 bytes and the list under 12,000.
+
 ### Compact output
 
 Everything a tool returns is read by the model as tokens, so results are compact by default:
@@ -355,6 +363,7 @@ that many children of the layer. Measured on the login screen above (7 layers): 
 
 | Tool | What it does |
 |---|---|
+| `read_guide {topic?}` | The detail the tool descriptions leave out, one topic at a time: `create` (create_node, create_tree, batch and `$step`), `properties` (every `set_properties` key and paint form), `inspect` (compact JSON, outline format, size limits), `look` (screenshot and export options), `commands`, `input` (pointer, key, type_text), `files`. No topic: the index. |
 | `list_commands {filter?}` | Every command: id, label, menu, shortcut, undoable, params doc. |
 | `run_command {command, params}` | Run any command (e.g. `align.left`, `layout.add`, `component.create`, `instance.place` (drop an instance at a page point into the frame or auto layout slot under it), `component.exposeInstance` / `instance.exposed` (nested instance properties on instances), `component.makeSlot` / `instance.slotInsert` / `instance.resetSlot` (slots, below), `inspect.code` (CSS, HTML + CSS for a whole frame, React, Leptos, SwiftUI or Jetpack Compose for a layer; components take their properties as parameters and instances are calls, see Dev Mode below), `inspect.properties` (layout, auto layout, typography, fills, strokes and effects with their style and variable names; `colorFormat`: hex, rgb, css, hsl or hsb), `inspect.assets` (layers under the selection with export settings, icons and images, each with its `kind`), `inspect.code` takes `unit: rem` and `rootFontSize` for CSS, HTML, React and Leptos, `style.create`, `variable.bind`, `variable.update` (rename, describe, scope), `variable.set` with `{alias}`, `variable.renameMode` / `variable.removeMode`, `variable.deleteCollection`, `proto.interaction.add`, `codeConnect.set` (components linked to real code, see Dev Mode below)). |
 | `batch {commands: [{command, params}], label?}` | Several commands as one undo step (`command.batch`); all-or-nothing for open documents and their document state. Failed inner commands are removed from the journal; preferences, clipboard, tool state and UI requests are not rolled back. A step can use what an earlier step returned: `{"$step": n}` anywhere in its params becomes the `id` in step n's result (zero-based), and `{"$step": n, "field": "…"}` another field of it (see Step references below). |
