@@ -1668,6 +1668,7 @@ version = "0.11.2"
 dependencies = [
  "base64 0.22.1",
  "figcraft-collab-net",
+ "figcraft-color",
  "figcraft-doc",
  "figcraft-engine",
  "figcraft-geom",

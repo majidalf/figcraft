@@ -265,12 +265,13 @@ pub fn tool_definitions() -> Vec<Value> {
         tool(
             "screenshot",
             "Screenshot",
-            "Look at the design: renders the given layers (or the whole current page, with its background) to PNG and returns it as image content, plus its size and the scale used. The image is scaled down to fit `maxSize` pixels. With `window: true` (or a window id from `inspect_ui`'s `windows`) and an attached app, captures that app window including the UI instead.",
+            "Look at the design: renders the given layers (or the whole current page, with its background) and returns it as image content, plus its size and the scale used. The image is scaled down to fit `maxSize` pixels (default 800: an image costs tokens by its area, so ask for more only to read small detail, or screenshot just the layers in question). `format` changes the encoding only (the token cost follows the pixel size): \"webp\" (lossless) is usually a fraction of PNG's bytes for flat UI, \"jpeg\" smaller only for photos and textures. With `window: true` (or a window id from `inspect_ui`'s `windows`) and an attached app, captures that app window including the UI instead.",
             obj(
                 json!({
                     "ids": ids_schema("Layers to render (default: the whole current page)"),
                     "scale": num("Requested scale (default 1; reduced to fit maxSize)"),
-                    "maxSize": int("Largest side in pixels (default 1600)"),
+                    "maxSize": int("Largest side in pixels (default 800)"),
+                    "format": {"type": "string", "enum": ["png", "jpeg", "webp"], "description": "Image format (default png; jpeg at quality 80 over white, webp lossless)"},
                     "window": {"description": "Capture the app window: true for the one in front, or a window id (attached app only; headless renders the page)", "anyOf": [{"type": "boolean"}, {"type": "integer"}]},
                 }),
                 &[],
@@ -1072,17 +1073,43 @@ fn export(b: &mut dyn Backend, a: &Map<String, Value>) -> Result<ToolResult, Str
     }
 }
 
+/// Largest side of a screenshot unless `maxSize` says otherwise. An image costs the model tokens by
+/// its pixel area, so this is the size that still shows a phone screen's text legibly at a quarter
+/// of what 1600 cost.
+const SCREENSHOT_SIDE: f64 = 800.0;
+/// JPEG quality for screenshots: smaller than PNG on photos and textures, text still sharp.
+const SCREENSHOT_JPEG_QUALITY: u8 = 80;
+
+/// A rendered PNG re-encoded in the `format` asked for: `(bytes, mime type)`.
+fn encode_shot(png: Vec<u8>, format: &str) -> Result<(Vec<u8>, &'static str), String> {
+    if format == "png" {
+        return Ok((png, "image/png"));
+    }
+    let pix = figcraft_render::images::decode(&png).ok_or("could not read the rendered image")?;
+    match format {
+        "jpeg" => Ok((figcraft_render::encode_jpeg(&pix, figcraft_color::Color::WHITE, SCREENSHOT_JPEG_QUALITY)?, "image/jpeg")),
+        _ => Ok((figcraft_render::encode_webp(&pix)?, "image/webp")),
+    }
+}
+
 fn screenshot(b: &mut dyn Backend, a: &Map<String, Value>) -> Result<ToolResult, String> {
+    let format = match s_arg(a, "format")?.map(str::to_ascii_lowercase).as_deref() {
+        None | Some("png") => "png",
+        Some("jpeg" | "jpg") => "jpeg",
+        Some("webp") => "webp",
+        Some(other) => return Err(format!("`format` must be png, jpeg or webp, not {other:?}")),
+    };
     let id = a.get("window").and_then(Value::as_u64);
     if (id.is_some() || matches!(a.get("window"), Some(Value::Bool(true)))) && b.has_ui() {
-        let bytes = match id {
+        let png = match id {
             Some(id) => b.window_png(id)?,
             None => b.screenshot_png()?,
         };
-        let (w, h) = png_info(&bytes);
-        return Ok(ToolResult::image(&bytes, "image/png", &json!({"source": "window", "width": w, "height": h})));
+        let (w, h) = png_info(&png);
+        let (bytes, mime) = encode_shot(png, format)?;
+        return Ok(ToolResult::image(&bytes, mime, &json!({"source": "window", "width": w, "height": h})));
     }
-    let max = n_arg(a, "maxSize")?.unwrap_or(1600.0).clamp(16.0, 8192.0);
+    let max = n_arg(a, "maxSize")?.unwrap_or(SCREENSHOT_SIDE).clamp(16.0, 8192.0);
     let req = n_arg(a, "scale")?.unwrap_or(1.0);
     if req <= 0.0 {
         return Err("`scale` must be positive".into());
@@ -1107,11 +1134,12 @@ fn screenshot(b: &mut dyn Backend, a: &Map<String, Value>) -> Result<ToolResult,
         bytes = b.render_png(&ids, scale)?;
         (w, h) = png_info(&bytes);
     }
-    Ok(ToolResult::image(
-        &bytes,
-        "image/png",
-        &json!({"source": if ids.is_empty() { "page" } else { "layers" }, "ids": ids, "scale": scale, "width": w, "height": h}),
-    ))
+    let (bytes, mime) = encode_shot(bytes, format)?;
+    let mut info = json!({"source": if ids.is_empty() { "page" } else { "layers" }, "scale": scale, "width": w, "height": h});
+    if !ids.is_empty() {
+        info["ids"] = json!(ids);
+    }
+    Ok(ToolResult::image(&bytes, mime, &info))
 }
 
 fn open_file(b: &mut dyn Backend, a: &Map<String, Value>) -> Result<ToolResult, String> {

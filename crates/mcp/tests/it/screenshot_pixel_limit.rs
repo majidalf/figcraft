@@ -50,3 +50,36 @@ fn plain_layer_screenshot_sizes_are_unchanged() {
     assert_eq!(dimensions(&mut client, json!({"ids": [rect], "maxSize": 100})), (100, 100));
     assert_eq!(dimensions(&mut client, json!({"ids": [rect], "scale": 2})), (200, 200));
 }
+
+#[test]
+fn a_page_screenshot_fits_800_by_default() {
+    let mut client = Client::new();
+    client.create(json!({"type": "frame", "x": 0, "y": 0, "width": 1600, "height": 1000, "props": {"fill": "#3366FF"}}));
+    let (w, h) = dimensions(&mut client, json!({}));
+    assert!(w.max(h) <= 800 && w.max(h) >= 790, "{w}x{h}");
+}
+
+#[test]
+fn screenshots_come_as_jpeg_or_webp() {
+    let mut client = Client::new();
+    let rect = client.create(
+        json!({"type": "rectangle", "width": 300, "height": 200, "props": {"fills": [{"type": "linearGradient", "stops": ["#FF0000", "#0000FF"]}]}}),
+    );
+    let shot = |c: &mut Client, format: &str| {
+        let r = c.call("screenshot", json!({"ids": [rect], "format": format}));
+        assert_eq!(r["isError"], false, "{r}");
+        let data = base64::Engine::decode(&base64::engine::general_purpose::STANDARD, r["content"][0]["data"].as_str().unwrap()).unwrap();
+        (r["content"][0]["mimeType"].as_str().unwrap().to_string(), data)
+    };
+    let (png_mime, png) = shot(&mut client, "png");
+    let (jpg_mime, jpg) = shot(&mut client, "jpeg");
+    let (webp_mime, webp) = shot(&mut client, "webp");
+    assert_eq!((png_mime.as_str(), jpg_mime.as_str(), webp_mime.as_str()), ("image/png", "image/jpeg", "image/webp"));
+    assert_eq!(&jpg[..3], b"\xFF\xD8\xFF");
+    assert_eq!(&webp[8..12], b"WEBP");
+    for img in [&png, &jpg, &webp] {
+        let i = image::load_from_memory(img).unwrap();
+        assert_eq!((i.width(), i.height()), (300, 200));
+    }
+    assert!(client.err("screenshot", json!({"format": "gif"})).contains("`format`"));
+}

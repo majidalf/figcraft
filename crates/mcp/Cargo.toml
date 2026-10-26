@@ -12,6 +12,7 @@ workspace = true
 figcraft-engine = { workspace = true }
 figcraft-collab-net = { workspace = true }
 figcraft-doc = { workspace = true }
+figcraft-color = { workspace = true }
 figcraft-geom = { workspace = true }
 figcraft-render = { workspace = true }
 serde_json = { workspace = true }
