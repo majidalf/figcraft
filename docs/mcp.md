@@ -394,6 +394,13 @@ to FigCraft's `import.pen` command (`read_guide {topic: "pen"}` has the exact sn
 2. In FigCraft, `run_command {command: "import.pen", params: {nodes, x?, y?, parent?}}`: one undo
    step, the roots selected, `{ids, layers, warnings}` returned.
 
+Design tokens come the same way: `Print(JSON.stringify(GetVariables()))` in pen.dev, then
+`run_command {command: "import.penVariables", params: {variables}}`. Each theme axis becomes a
+collection with a mode per value (`mode`: light, dark), variables without a theme go to a "Tokens"
+collection, and `$name` values stay aliases. It writes the local variables JSON and reads it with
+`variable.import`, so importing again updates the same collections and variables. A design system of
+276 tokens (colours, numbers, strings; light and dark) came in with no warnings.
+
 The JSON is pen.dev's published `.pen` schema (the one its skill gives agents). Frames become frames
 (no `layout` means horizontal, `none` no auto layout, `fit_content` hug, `fill_container` fill; pen.dev
 frames don't clip unless `clip`, and their inside strokes don't push children in), reusable frames

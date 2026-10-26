@@ -224,6 +224,11 @@ Print(JSON.stringify(t))
 \"y\"?: 0, \"parent\"?: id}}. One undo step; returns {ids, layers, warnings}; the roots are selected. \
 Check it with get_node {id, format: \"outline\", depth: 8} and a screenshot.
 
+Design tokens: in pen.dev run Print(JSON.stringify(GetVariables())), then run_command \
+{\"command\":\"import.penVariables\",\"params\":{\"variables\": <the printed JSON>}}. Each theme axis \
+becomes a collection with a mode per value, unthemed variables go to \"Tokens\", `$name` values stay \
+aliases; importing again updates rather than doubles.
+
 Several frames: one array in `nodes` (the first root goes to x/y, the rest keep their places). The \
 JSON passes through you, so import a screen at a time rather than a whole file.
 
