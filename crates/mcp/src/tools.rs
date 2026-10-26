@@ -143,10 +143,10 @@ pub fn tool_definitions() -> Vec<Value> {
         tool(
             "batch",
             "Run commands as one step",
-            "Several commands as ONE undo step, all or nothing. In a later step's params {\"$ref\": name} is the id a step named with \"as\" returned, {\"$step\": n} by position (read_guide create).",
+            "Several commands as ONE undo step, all or nothing. Later steps take earlier ids as {\"$ref\": name} or {\"$step\": n} (read_guide create).",
             obj(
                 json!({
-                    "commands": {"type": "array", "minItems": 1, "items": obj(json!({"command": string("Command id"), "params": {"type": "object"}, "as": string("Step name for $ref")}), &["command"])},
+                    "commands": {"type": "array", "minItems": 1, "items": obj(json!({"command": string("Command id"), "params": {"type": "object"}, "as": string("Name for $ref")}), &["command"])},
                     "label": string("Undo label"),
                 }),
                 &["commands"],
@@ -281,7 +281,7 @@ pub fn tool_definitions() -> Vec<Value> {
         tool(
             "open_file",
             "Open file",
-            "Open .figcraft, .json, .fig or .sketch (best effort), .svg or an image as the active document (read_guide files).",
+            "Open .figcraft, .json, .fig or .sketch (best effort), .svg or an image as the document (read_guide files).",
             obj(
                 json!({"path": string("File path"), "variables": {"description": "REST API JSON only: local variables JSON or its path"}}),
                 &["path"],
