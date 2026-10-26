@@ -36,6 +36,7 @@ reports both x/y relative to the parent frame (groups don't count) and absoluteB
 (left out when the same as x/y). Results are compact: values a new layer has anyway are left out (the tool \
 descriptions say which), and verbose: true returns everything. Children of an auto-layout frame are \
 positioned by the layout (set layout, gap, padding, mainAlign, crossAlign, sizingH/sizingV instead). \
+Build a whole screen in one call with create_tree (nested layers with `children`, one undo step). \
 Every menu item, panel action and shortcut is a command: find ids and params with list_commands (use a filter) \
 and run them with run_command, or several as one undo step with batch. Commands act on `ids` when given, else \
 on the selection; new layers become the selection. Colours are \"#RRGGBB\" or \"#RRGGBBAA\". Verify your work: \

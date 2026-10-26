@@ -120,6 +120,19 @@ pub fn bad(cmd: &str, msg: impl Into<String>) -> EngineError {
     EngineError::BadParams { cmd: cmd.to_string(), msg: msg.into() }
 }
 
+/// A batch step's error with `step N: ` in front of its message, so a caller knows which step to
+/// fix. The kind of error stays; kinds without a message of their own are left as they are.
+fn in_step(e: EngineError, step: usize) -> EngineError {
+    let tag = |m: String| if m.starts_with(&format!("step {step}:")) { m } else { format!("step {step}: {m}") };
+    match e {
+        EngineError::BadParams { cmd, msg } => EngineError::BadParams { cmd, msg: tag(msg) },
+        EngineError::Disabled(cmd, msg) => EngineError::Disabled(cmd, tag(msg)),
+        EngineError::Other(msg) => EngineError::Other(tag(msg)),
+        EngineError::Internal { cmd, msg } => EngineError::Internal { cmd, msg: tag(msg) },
+        other => other,
+    }
+}
+
 /// Deepest params nesting `resolve_step_refs` walks before giving up.
 const STEP_REF_MAX_DEPTH: usize = 64;
 
@@ -1282,7 +1295,7 @@ impl Session {
         self.grouped(label, |s| {
             let mut results: Vec<Value> = Vec::with_capacity(cmds.len());
             for (step, (id, p)) in cmds.iter().enumerate() {
-                let v = s.batch_step(&results, step, id, p)?;
+                let v = s.batch_step(&results, step, id, p).map_err(|e| in_step(e, step))?;
                 results.push(v);
             }
             Ok(results)

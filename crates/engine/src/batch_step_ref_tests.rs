@@ -110,3 +110,22 @@ fn a_nested_batch_refers_to_its_own_steps() {
     let rect = s.doc().unwrap().node(id(&inner[1])).unwrap().clone();
     assert_eq!(rect.parent, Some(id(&inner[0])), "in the nested batch's own first frame, not the outer one");
 }
+
+#[test]
+fn a_failing_step_is_named_and_keeps_its_kind_of_error() {
+    let mut s = Session::new();
+    let e = s
+        .execute(
+            "command.batch",
+            &json!({"commands": [
+                {"command": "node.create", "params": {"type": "frame"}},
+                {"command": "node.set", "params": {"ids": [{"$step": 0}], "props": {"noSuchProperty": 1}}}
+            ]}),
+        )
+        .unwrap_err();
+    assert!(matches!(&e, EngineError::BadParams { cmd, msg } if cmd == "node.set" && msg.starts_with("step 1: ")), "{e}");
+    let e = s
+        .execute("command.batch", &json!({"commands": [{"command": "node.create", "params": {"parent": {"$step": 5}, "type": "frame"}}]}))
+        .unwrap_err();
+    assert!(!e.to_string().contains("step 0: step 0"), "not named twice: {e}");
+}

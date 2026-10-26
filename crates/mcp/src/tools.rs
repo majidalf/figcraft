@@ -95,6 +95,7 @@ pub const TOOL_NAMES: &[&str] = &[
     "run_command",
     "batch",
     "create_node",
+    "create_tree",
     "set_properties",
     "inspect_document",
     "get_node",
@@ -165,6 +166,20 @@ pub fn tool_definitions() -> Vec<Value> {
                     "verbose": verbose_schema(),
                 }),
                 &["type"],
+            ),
+            false,
+        ),
+        tool(
+            "create_tree",
+            "Create layer tree",
+            "Build a whole screen in ONE call and one undo step: `nodes` is a layer (or an array of them) with the create_node keys (type, name, x, y, width, height, text, path, index, props) plus `children`, nested to any depth. Example: {\"nodes\":{\"type\":\"frame\",\"name\":\"Login\",\"width\":390,\"height\":844,\"props\":{\"fill\":\"#FFFFFF\",\"layout\":\"vertical\",\"padding\":24,\"gap\":16},\"children\":[{\"type\":\"text\",\"text\":\"Welcome back\",\"props\":{\"fontSize\":28}},{\"type\":\"rectangle\",\"name\":\"Email\",\"width\":342,\"height\":48,\"props\":{\"fill\":\"#F1F3F5\",\"cornerRadius\":8}}]}}. All or nothing: a failing layer creates nothing and the error gives its place (nodes[0].children[1]). Returns the new layers as an outline (see inspect_document format \"outline\"): each id and where the layout put it. The roots become the selection.",
+            obj(
+                json!({
+                    "nodes": {"description": "A layer {type, name?, x?, y?, width?, height?, text?, path?, index?, props?, children?} or an array of them", "anyOf": [{"type": "object"}, {"type": "array", "items": {"type": "object"}}]},
+                    "parent": id_schema("Frame/group/component the roots go in (default: the current page)"),
+                    "label": string("Undo history label (default \"Create layers\")"),
+                }),
+                &["nodes"],
             ),
             false,
         ),
@@ -444,6 +459,7 @@ pub fn call_tool(b: &mut dyn Backend, name: &str, args: &Value) -> ToolResult {
         "run_command" => run_command(b, &a),
         "batch" => batch(b, &a),
         "create_node" => create_node(b, &a),
+        "create_tree" => create_tree(b, &a),
         "set_properties" => set_properties(b, &a),
         "inspect_document" => inspect_document(b, &a),
         "get_node" => get_node(b, &a),
@@ -567,6 +583,29 @@ fn create_node(b: &mut dyn Backend, a: &Map<String, Value>) -> Result<ToolResult
         return Ok(ToolResult::json(&json!({"id": id, "node": node})));
     }
     Ok(ToolResult::json(&layer_box(&node)))
+}
+
+/// A nested layer tree as one batch (see `tree`); answers with the new layers as an outline, so
+/// the ids and where the layout put each layer come back in the same call.
+fn create_tree(b: &mut dyn Backend, a: &Map<String, Value>) -> Result<ToolResult, String> {
+    let nodes = a.get("nodes").ok_or("`nodes` is required")?;
+    let parent = a.get("parent").filter(|v| !v.is_null());
+    if let Some(p) = parent {
+        id_arg(p)?;
+    }
+    let plan = crate::tree::plan(nodes, parent)?;
+    let label = s_arg(a, "label")?.unwrap_or("Create layers");
+    let (max_bytes, budget) = budget(a)?;
+    let results = exec(b, "command.batch", json!({"label": label, "commands": plan.steps})).map_err(|e| crate::tree::locate(&e, &plan))?;
+    let roots: Vec<Value> = plan.roots.iter().filter_map(|i| results.get(*i)?.get("id").cloned()).collect();
+    exec(b, "select.set", json!({"ids": roots}))?;
+    let mut lines = Vec::new();
+    for id in &roots {
+        let mut v = b.call("node.get", json!({"id": id, "depth": crate::tree::MAX_DEPTH}))?;
+        crate::slim::tree(&mut v);
+        lines.extend(crate::outline::tree(&v));
+    }
+    Ok(outline_result(lines, budget, max_bytes))
 }
 
 /// A layer's id and box, the reply to an edit: what an agent needs to place the next layer, at a
