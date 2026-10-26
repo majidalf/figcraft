@@ -4,7 +4,7 @@
 
 /// `(topic, one-line summary, text)`, in the order the index lists them.
 pub const TOPICS: &[(&str, &str, &str)] = &[
-    ("create", "create_node, create_tree, batch and $step references", CREATE),
+    ("create", "create_node, create_tree, batch and $ref / $step references", CREATE),
     ("properties", "every set_properties key: paints, gradients, effects, auto layout, text", PROPERTIES),
     ("inspect", "inspect_document / get_node: compact JSON, outline format, size limits", INSPECT),
     ("look", "screenshot and export: sizes, formats, PDF and SVG options, windows", LOOK),
@@ -70,10 +70,11 @@ selection.
 
 batch {commands: [{command, params}], label?}: several commands in order as ONE undo step. If one \
 fails, everything is rolled back and the error starts with `step N:`. Returns the results in order. \
-A later step can use what an earlier one returned: anywhere in its params {\"$step\": n} stands for \
-the `id` in step n's result (zero-based); {\"$step\": n, \"field\": \"…\"} picks another field. Example: \
-[{\"command\":\"node.create\",\"params\":{\"type\":\"frame\"}}, \
-{\"command\":\"node.create\",\"params\":{\"type\":\"text\",\"text\":\"Hi\",\"parent\":{\"$step\":0}}}]. \
+A later step can use what an earlier one returned: name a step with \"as\": \"card\", then anywhere in \
+a later step's params {\"$ref\": \"card\"} stands for the `id` in its result ({\"$step\": n} does the same \
+by zero-based position). \"field\" picks another part: a key or a slash path, e.g. {\"$ref\": \"copy\", \
+\"field\": \"ids/0\"}. Example: [{\"command\":\"node.create\",\"as\":\"card\",\"params\":{\"type\":\"frame\"}}, \
+{\"command\":\"node.create\",\"params\":{\"type\":\"text\",\"text\":\"Hi\",\"parent\":{\"$ref\":\"card\"}}}]. \
 Use batch for mixed commands (create, then align, group, make a component…); create_tree for layer trees.
 ";
 

@@ -82,6 +82,14 @@ pub fn paste(app: &mut FigApp, event_text: Option<&str>, at: Option<(f64, f64)>)
             }
             use base64::Engine as _;
             let b64 = base64::engine::general_purpose::STANDARD.encode(png);
+            // One selected layer that can have fills takes the image as its top fill.
+            if let [target] = app.session.selection()[..]
+                && at.is_none()
+                && app.session.doc().ok().and_then(|d| d.node(target)).is_some_and(|n| figcraft_engine::cmd::create::accepts_image_fill(&n.kind))
+            {
+                app.run("image.place", json!({"data": b64, "target": target}));
+                return;
+            }
             // Centred in the view; Paste here puts its top-left at the point, as it does layers.
             let (x, y) = if at.is_some() { (cx, cy) } else { ((cx - f64::from(w) / 2.0).round(), (cy - f64::from(h) / 2.0).round()) };
             app.run("file.import", json!({"data": b64, "name": "Pasted image.png", "x": x, "y": y}));
@@ -241,8 +249,10 @@ pub fn invoke(app: &mut FigApp, id: &str) {
             app.toast(tr("Copied as text"));
         }
         "edit.copyLink" => {
+            // Only a selected layer has a link, and the copy goes through the control-channel fence
+            // (`clipboard_set_text`): a synthetic gesture never replaces the user's clipboard.
             if let Some(id) = app.session.selection().first() {
-                app.services.clipboard_set_text(&format!("figcraft://node/{}", id.0));
+                app.clipboard_set_text(&format!("figcraft://node/{}", id.0));
                 app.toast(tr("Link copied"));
             }
         }
@@ -255,7 +265,7 @@ pub fn invoke(app: &mut FigApp, id: &str) {
         // The file name in the left panel's header turns into its editor, the name selected.
         "file.rename" => {
             app.ui.left_tab = crate::LeftTab::File;
-            app.ui.left_collapsed = false;
+            app.ui.open_left_panel();
             app.ui.rename_file = true;
         }
         "text.link" => app.ui.menu_input = Some(crate::dialogs::MenuInput::Link(String::new())),
@@ -270,7 +280,7 @@ pub fn invoke(app: &mut FigApp, id: &str) {
         "tool.set" => app.ui.tool_flyout = Some("move"),
         "page.select" => {
             app.ui.left_tab = crate::LeftTab::File;
-            app.ui.left_collapsed = false;
+            app.ui.open_left_panel();
             app.ui.pages_open = true;
         }
         // From a menu the link is pasted into the Join dialog (`collab.join {link}` joins directly).
@@ -311,6 +321,15 @@ pub fn invoke(app: &mut FigApp, id: &str) {
 /// Every visible top-level frame of the page as one PDF page each, through a save dialog.
 fn export_frames_pdf(app: &mut FigApp) {
     let name = app.session.doc().map(|d| d.name.clone()).unwrap_or_else(|_| "Untitled".into());
+    if app.services.downloads() {
+        let file = format!("{name}.pdf");
+        if let Some(r) = app.run("file.exportFramesPdf", json!({}))
+            && app.download(&file, &r)
+        {
+            app.toast(trf("Exported {name}", &[("name", &file)]));
+        }
+        return;
+    }
     app.pick_save(tr("Export"), &format!("{name}.pdf"), &["pdf"], |app, p| {
         if app.run("file.exportFramesPdf", json!({"path": p.to_string_lossy()})).is_some() {
             app.toast(trf("Exported {name}", &[("name", &p.file_name().map(|f| f.to_string_lossy().to_string()).unwrap_or_default())]));
@@ -691,10 +710,19 @@ fn submenu_at<R>(
     if !open {
         return None;
     }
-    let pos = pos2(r.max.x + gap, r.min.y - 8.0);
+    let mut pos = pos2(r.max.x + gap, r.min.y - 8.0);
+    // No room beside the row (a phone): the submenu covers its parent instead of running off screen.
+    let screen = ui.ctx().content_rect();
+    let cramped = pos.x + MENU_W > screen.max.x;
+    if cramped {
+        pos.x = (screen.max.x - MENU_W - 8.0).max(screen.min.x + 4.0);
+    }
     let child = At { root: at.root, path: key.to_string() };
-    let shown =
-        egui::Area::new(area).fixed_pos(pos).order(egui::Order::Foreground).constrain(constrain).show(ui.ctx(), |ui| menu_frame(ui, t, child, add));
+    let shown = egui::Area::new(area)
+        .fixed_pos(pos)
+        .order(egui::Order::Foreground)
+        .constrain(constrain || cramped)
+        .show(ui.ctx(), |ui| menu_frame(ui, t, child, add));
     let panel = shown.response.rect;
     with_level(ui.ctx(), &at, |l| l.panel = Some(panel));
     shown.inner

@@ -5,6 +5,7 @@ pub mod comment;
 pub mod component;
 pub mod create;
 pub mod edit;
+pub mod facilitate;
 pub mod file;
 pub mod image;
 pub mod layout;
@@ -116,6 +117,9 @@ fn registry() -> &'static Registry {
         list.extend(crate::pen::specs());
         list.extend(crate::pen_variables::specs());
         list.extend(crate::icon_sets::specs());
+        list.extend(facilitate::specs());
+        list.extend(crate::board_table::specs());
+        list.extend(crate::board_templates::specs());
         let mut index = HashMap::new();
         for (i, s) in list.iter().enumerate() {
             if index.insert(s.id, i).is_some() {

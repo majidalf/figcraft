@@ -56,8 +56,8 @@ fn import(s: &mut Session, p: &Value) -> Result<Value> {
     }
     place_roots(&mut layers, num(p, "x"), num(p, "y"));
     let plan = crate::layer_tree::plan(&Value::Array(layers), get(p, "parent")).map_err(|e| bad("import.pen", e))?;
-    let steps: Vec<(String, Value)> =
-        plan.steps.iter().map(|st| (st["command"].as_str().unwrap_or("node.create").to_string(), st["params"].clone())).collect();
+    let steps: Vec<crate::BatchStep> =
+        plan.steps.iter().map(|st| crate::BatchStep::new(st["command"].as_str().unwrap_or("node.create"), st["params"].clone())).collect();
     let results = s.batch("Import from pen.dev", &steps).map_err(|e| EngineError::Other(crate::layer_tree::locate(&e.to_string(), &plan)))?;
     let ids: Vec<Value> = plan.roots.iter().filter_map(|i| results.get(*i)?.get("id").cloned()).collect();
     let roots: Vec<_> = ids.iter().filter_map(crate::params::id_of).collect();
