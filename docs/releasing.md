@@ -93,6 +93,14 @@ releases builds with `FIGCRAFT_UPDATE_REPO=owner/repo`, and its copies then look
 FIGCRAFT_UPDATE_REPO=majidalf/figcraft cargo build --release -p figcraft
 ```
 
+A fork whose copies agents drive (`figcraft-cli mcp --attach`) can also build the control channel in
+with `FIGCRAFT_DEFAULT_CONTROL_PORT=7979` (see `docs/control-protocol.md`), so no flag or environment
+variable is needed on each computer it is installed on:
+
+```sh
+FIGCRAFT_UPDATE_REPO=majidalf/figcraft FIGCRAFT_DEFAULT_CONTROL_PORT=7979 pwsh packaging/windows/package.ps1 -Arch x64
+```
+
 The release needs the same assets as an official one (for Windows,
 `figcraft-<v>-windows-<arch>-portable.zip` with `portable.txt` beside `figcraft.exe`, and
 `SHA256SUMS.txt`). Installing an update from inside the app also needs the copies signed by the

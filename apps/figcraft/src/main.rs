@@ -3,7 +3,8 @@
 //! Usage: `figcraft [--control <port>] [files…] [figcraft://join?…]` (an invite link joins that
 //! live session; the app registers itself as the opener of such links: `collab.registerLinks`).
 //!
-//! `--control <port>` (or `FIGCRAFT_CONTROL_PORT`) starts a localhost JSON-lines control server:
+//! `--control <port>` (or `FIGCRAFT_CONTROL_PORT`, or a port built in with
+//! `FIGCRAFT_DEFAULT_CONTROL_PORT`) starts a localhost JSON-lines control server:
 //! `{"id":1,"method":"engine.execute","params":{"command":"shape.rectangle","params":{"x":0,"y":0,"width":100,"height":100}}}`
 //! → `{"id":1,"ok":true,"result":{…}}`. Methods: `figcraft_ui_egui::control`.
 //!
@@ -167,6 +168,7 @@ fn main() -> eframe::Result {
         }
     };
     let port = args.control.or_else(|| std::env::var("FIGCRAFT_CONTROL_PORT").ok().and_then(|p| p.parse().ok()));
+    let listen = listen_port(port, option_env!("FIGCRAFT_DEFAULT_CONTROL_PORT"));
     // System fonts: index them in the background, then wake the UI (an idle window draws no frames)
     // to lay text out again with them.
     let ctx_slot: Arc<Mutex<Option<egui::Context>>> = Arc::new(Mutex::new(None));
@@ -233,7 +235,7 @@ fn main() -> eframe::Result {
         figcraft_ui_egui::live::open_invite(&mut fig, link);
     }
     let queue: Arc<Mutex<Vec<ControlRequest>>> = Arc::new(Mutex::new(Vec::new()));
-    if let Some(p) = port {
+    if let Some(p) = listen {
         control_server::start(p, queue.clone(), ctx_slot.clone());
     }
     let icon = services::window_icon();
@@ -288,6 +290,15 @@ fn main() -> eframe::Result {
     result
 }
 
+/// The port the control server listens on: the one asked for (`--control`, `FIGCRAFT_CONTROL_PORT`),
+/// else the one the build names in `FIGCRAFT_DEFAULT_CONTROL_PORT`, so a fork's installed copies can
+/// be driven by agents (`figcraft-cli mcp --attach PORT`) on every computer without a flag. Only an
+/// asked-for port changes how the app starts (`opens_new_file`, a quiet failure): with a built-in
+/// one the app starts as it always does. A built-in value that isn't a port number (or is 0) is none.
+fn listen_port(asked: Option<u16>, built_in: Option<&str>) -> Option<u16> {
+    asked.or_else(|| built_in.and_then(|p| p.trim().parse().ok()).filter(|p| *p != 0))
+}
+
 /// With nothing to open, whether the window starts in a new file rather than on the home screen.
 /// A first run (no settings kept yet) shows the home screen's tips and templates, and later runs
 /// start in a new file unless the preference asks for Home, which `--control` overrides: its
@@ -333,6 +344,26 @@ fn window_chrome(viewport: egui::ViewportBuilder, title_bar: figcraft_ui_egui::T
         TitleBar::Inset => viewport.with_fullsize_content_view(true).with_titlebar_shown(false).with_title_shown(false),
         TitleBar::Native => viewport.with_decorations(true),
         TitleBar::Custom => viewport.with_decorations(false),
+    }
+}
+
+#[cfg(test)]
+mod listen_port_tests {
+    use super::listen_port;
+
+    #[test]
+    fn an_asked_for_port_wins_over_the_built_in_one() {
+        assert_eq!(listen_port(Some(4242), Some("7979")), Some(4242));
+        assert_eq!(listen_port(None, Some("7979")), Some(7979));
+        assert_eq!(listen_port(None, Some(" 7979 ")), Some(7979));
+        assert_eq!(listen_port(None, None), None);
+    }
+
+    #[test]
+    fn a_built_in_value_that_is_no_port_is_none() {
+        for bad in ["", "0", "nope", "70000", "-1"] {
+            assert_eq!(listen_port(None, Some(bad)), None, "{bad:?}");
+        }
     }
 }
 

@@ -7,6 +7,14 @@ sibling Crafting Apps) through a loopback socket:
 cargo run -p figcraft -- --control 7979 [file.figcraft|file.svg|image]
 ```
 
+`FIGCRAFT_CONTROL_PORT=<port>` in the environment does the same. A build can also carry a port of its
+own: `FIGCRAFT_DEFAULT_CONTROL_PORT=7979 cargo build --release -p figcraft` makes every copy of that
+build listen on 7979 without a flag, so a fork's installer gives agents (`figcraft-cli mcp --attach
+7979`) the app on each computer it is installed on. `--control` and `FIGCRAFT_CONTROL_PORT` still
+choose another port; a built-in port only adds the listener, and the app otherwise starts as usual
+(the official builds carry none). When the port is taken (a second copy of the app), the app runs
+without the channel and says so on standard error.
+
 The app listens on `127.0.0.1:<port>` only. Each connection carries **newline-delimited JSON**:
 one request object per line, one reply line per request, in order.
 
