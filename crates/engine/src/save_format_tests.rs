@@ -133,6 +133,41 @@ fn opening_an_older_file_uses_its_filename_only_for_the_default_title() {
     assert_eq!(reopened.ds().unwrap().doc.name, "Chosen title");
 }
 
+/// A file renamed in the file manager opens under its new name when the document was named after
+/// the file it was saved as; a name chosen apart from the file stays whatever the file is called.
+#[test]
+fn a_file_renamed_outside_figcraft_opens_under_its_new_name() {
+    let mut files = SaveFiles::new();
+    let saved = files.path("Redis.figcraft");
+    let renamed = files.path("Portfolio 2026.figcraft");
+    let mut s = Session::new();
+    rect(&mut s, "Card");
+    s.execute("file.saveAs", &json!({"path": saved.to_string_lossy()})).unwrap();
+    std::fs::rename(&saved, &renamed).unwrap();
+    let mut reopened = Session::empty();
+    reopened.execute("file.open", &json!({"path": renamed.to_string_lossy()})).unwrap();
+    assert_eq!(reopened.ds().unwrap().doc.name, "Portfolio 2026");
+
+    // Saving keeps following the file: a second rename is picked up too.
+    rect(&mut reopened, "Badge");
+    reopened.execute("file.save", &json!({})).unwrap();
+    let again = files.path("Portfolio final.figcraft");
+    std::fs::rename(&renamed, &again).unwrap();
+    let mut third = Session::empty();
+    third.execute("file.open", &json!({"path": again.to_string_lossy()})).unwrap();
+    assert_eq!(third.ds().unwrap().doc.name, "Portfolio final");
+
+    let chosen = files.path("Other.figcraft");
+    let moved = files.path("Moved.figcraft");
+    let mut named = Session::new();
+    named.execute("file.rename", &json!({"name": "Chosen title"})).unwrap();
+    named.execute("file.saveAs", &json!({"path": chosen.to_string_lossy()})).unwrap();
+    std::fs::rename(&chosen, &moved).unwrap();
+    let mut reopened = Session::empty();
+    reopened.execute("file.open", &json!({"path": moved.to_string_lossy()})).unwrap();
+    assert_eq!(reopened.ds().unwrap().doc.name, "Chosen title");
+}
+
 fn read_fig(path: &std::path::Path, result: &Value) -> figcraft_doc::Document {
     let bytes = std::fs::read(path).unwrap();
     assert_eq!(result["format"], "fig");

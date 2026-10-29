@@ -567,8 +567,12 @@ fn load_with(
                 return Ok((figcraft_format::Loaded { issues: warnings, ..doc.into() }, true));
             }
             let mut loaded = figcraft_format::load_bytes_with_versions(bytes).map_err(|e| EngineError::Other(e.to_string()))?;
-            // Older files saved an untouched default title even after the user chose a filename.
-            if loaded.doc.name.is_empty() || loaded.doc.name == "Untitled" {
+            // A name that followed the file follows it again, so a file renamed outside FigCraft
+            // opens under its new name; a name chosen apart from the file stays. Older files don't
+            // say: only their untouched default title follows (they saved it even after the user
+            // chose a filename).
+            let untitled = loaded.doc.name.is_empty() || loaded.doc.name == "Untitled";
+            if loaded.doc.name_follows_file.unwrap_or(untitled) {
                 loaded.doc.name = file_stem(name_hint);
             }
             Ok((loaded, false))
@@ -1039,6 +1043,9 @@ impl FileSnapshot {
     pub fn encode(&self) -> Result<Vec<u8>> {
         let mut doc = (*self.doc).clone();
         doc.current_page = Some(self.page);
+        if let Some(path) = &self.path {
+            doc.name_follows_file = Some(doc.name == file_stem(path));
+        }
         let thumb = thumbnail(&doc);
         figcraft_format::save_bytes_with_history(&doc, thumb.as_deref(), &self.versions, &self.branches)
             .map_err(|e| EngineError::Other(e.to_string()))
@@ -1127,6 +1134,10 @@ fn save_to(s: &mut Session, path: Option<String>) -> Result<Value> {
         && ds.path.as_deref() != Some(path)
     {
         Arc::make_mut(&mut snapshot.doc).name = file_stem(path);
+    }
+    // Encoded for the file it is written to (whether the name follows it), not the old one.
+    if path.is_some() {
+        snapshot.path.clone_from(&path);
     }
     let bytes = snapshot.encode()?;
     let Some(path) = path else {

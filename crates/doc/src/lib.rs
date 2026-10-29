@@ -219,6 +219,11 @@ pub struct Document {
     /// The vote's ballots, by voter.
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
     pub votes: Ballots,
+    /// Whether the name was the file's own when the file was saved (`None`: a file from before this
+    /// was kept). Opening a file whose name followed it names the document after the file again,
+    /// so renaming the file in the file manager renames the document.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub name_follows_file: Option<bool>,
 }
 
 impl Default for Document {
@@ -261,6 +266,7 @@ impl Document {
             timer: None,
             vote: None,
             votes: BTreeMap::new(),
+            name_follows_file: None,
         }
     }
 
