@@ -10,6 +10,12 @@ use crate::FigApp;
 use crate::i18n::{tr, trn};
 use crate::theme::{Tokens, regular};
 
+/// Whether `family` is a font this computer doesn't have. Before the installed fonts are indexed
+/// nothing is: every family would count as missing then.
+pub(crate) fn not_installed(family: &str) -> bool {
+    !cfg!(target_arch = "wasm32") && figcraft_text::installed_fonts_known() && !figcraft_text::has_family(family)
+}
+
 #[derive(Clone, Debug)]
 pub struct Shown {
     /// The document it lists: the window goes when that document closes.

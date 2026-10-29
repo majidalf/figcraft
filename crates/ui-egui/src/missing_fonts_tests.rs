@@ -147,3 +147,33 @@ fn placing_images_or_clearing_recents_does_not_bring_it_back() {
     assert!(u.app.ui.font_checks.is_empty());
     assert_eq!(listed(&u), Value::Null);
 }
+
+/// The Typography section says when the selected text's family isn't installed, however the file
+/// came to be open (a file opened by an agent or script never shows the window), and the line
+/// opens the Missing fonts window; an installed family gets no such line.
+#[test]
+fn the_typography_section_flags_a_family_that_is_not_installed() {
+    if !fonts_indexed() {
+        eprintln!("skipped: system fonts opted out");
+        return;
+    }
+    let mut s = Session::new();
+    let missing =
+        s.execute("text.create", &json!({"text": "Hamburgefonstiv", "x": 0, "y": 0, "props": {"fontFamily": "FigCraft Missing UI"}})).unwrap()["id"]
+            .clone();
+    let installed = figcraft_text::family_names().into_iter().next().unwrap_or_else(|| "Inter".into());
+    let present =
+        s.execute("text.create", &json!({"text": "Hamburgefonstiv", "x": 0, "y": 80, "props": {"fontFamily": installed}})).unwrap()["id"].clone();
+    let mut u = Ui::new(s);
+    let note = crate::i18n::tr("Not installed on this computer").to_string();
+
+    u.app.run("select.set", json!({"ids": [missing]}));
+    u.frame(vec![]);
+    let shown = crate::import_report_tests::shown_texts(u.frame_output(vec![]).shapes);
+    assert!(shown.contains(&note), "{shown:?}");
+
+    u.app.run("select.set", json!({"ids": [present]}));
+    u.frame(vec![]);
+    let shown = crate::import_report_tests::shown_texts(u.frame_output(vec![]).shapes);
+    assert!(!shown.contains(&note), "{shown:?}");
+}

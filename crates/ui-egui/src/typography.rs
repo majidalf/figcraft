@@ -177,9 +177,13 @@ fn font_rows(app: &mut FigApp, ui: &mut Ui, ids: &[NodeId], styles: &[TextStyle]
     // Font family.
     let family = uniform(styles, |s| s.font_family.clone());
     let fstyle = uniform(styles, |s| s.font_style.clone());
+    // A family this computer doesn't have is drawn in a fallback font: the field says so, whether or
+    // not the Missing fonts window was shown when the file opened.
+    let not_installed = family.as_deref().is_some_and(crate::missing_fonts::not_installed);
     row(ui, 32.0, |ui| {
         let w = ui.available_width();
-        let resp = font_dropdown(app, ui, ids, "fontFamily", family.as_deref(), w, editing);
+        let lead = not_installed.then_some(Icon::GamutWarning);
+        let resp = font_dropdown(app, ui, ids, "fontFamily", family.as_deref(), w, editing, lead);
         menu_popup(&resp).width(w.max(240.0)).close_behavior(egui::PopupCloseBehavior::CloseOnClickOutside).show(|ui| {
             if !editing && apply_variable_item(ui, ids, "fontFamily", &resp) {
                 return;
@@ -196,11 +200,22 @@ fn font_rows(app: &mut FigApp, ui: &mut Ui, ids: &[NodeId], styles: &[TextStyle]
             }
         });
     });
+    if not_installed {
+        row(ui, 20.0, |ui| {
+            let note = egui::RichText::new(tr("Not installed on this computer")).font(regular(11.0)).color(t.text_secondary);
+            let resp = ui
+                .add(egui::Label::new(note).sense(Sense::click()))
+                .on_hover_text(tr("Text in this font is drawn in a fallback font. Show the missing fonts"));
+            if resp.clicked() {
+                crate::missing_fonts::request(app);
+            }
+        });
+    }
 
     // Style + size.
     let half = (ui.available_width() - PAD * 2.0 - 8.0) / 2.0;
     row(ui, 32.0, |ui| {
-        let resp = font_dropdown(app, ui, ids, "fontStyle", fstyle.as_deref(), half, editing);
+        let resp = font_dropdown(app, ui, ids, "fontStyle", fstyle.as_deref(), half, editing, None);
         let fam = family.clone();
         menu_popup(&resp).width(200.0).show(|ui| {
             if !editing && apply_variable_item(ui, ids, "fontStyle", &resp) {
@@ -367,13 +382,22 @@ fn menu_item_hover(ui: &mut Ui, label: &str) -> (bool, bool) {
 /// None). While whole layers are edited and `field` is bound to the same variable on every one of
 /// `ids`, the variable's chip is drawn in place of the dropdown (a click picks another variable,
 /// its detach button unbinds it), and the returned response opens no menu.
-fn font_dropdown(app: &mut FigApp, ui: &mut Ui, ids: &[NodeId], field: &str, shown: Option<&str>, width: f32, editing: bool) -> egui::Response {
+fn font_dropdown(
+    app: &mut FigApp,
+    ui: &mut Ui,
+    ids: &[NodeId],
+    field: &str,
+    shown: Option<&str>,
+    width: f32,
+    editing: bool,
+    lead: Option<Icon>,
+) -> egui::Response {
     if !editing && app.session.doc().ok().and_then(|d| crate::variable_ui::bound_name(d, ids, field)).is_some() {
         let (rect, resp) = ui.allocate_exact_size(vec2(width, FIELD_H), Sense::hover());
         crate::variable_ui::bound_chip(app, ui, ids, field, VariableType::String, rect);
         return resp;
     }
-    widgets::dropdown(ui, shown.unwrap_or(tr(MIXED)), width, None)
+    widgets::dropdown(ui, shown.unwrap_or(tr(MIXED)), width, lead)
 }
 
 /// Apply variable at the top of the font family or font style menu opened from `anchor`: a click
